@@ -469,18 +469,16 @@ interface FlowEdgeData extends Record<string, unknown> {
 
 /** Custom edge renderer: bezier path with arrow marker and a label; reads
  * the hover focus from context so the edges array never changes on hover.
- * Edges stay mounted (invisible) by default and appear while their
- * requirement is focused, so the board stays clean and the flow reads on
- * hover. The marker defs are declared once in the board (see markerDefs
- * below); this component only switches the url() reference by hover state. */
+ * Edges stay mounted and visible: the requirement's stage flow (t2 → t3 →
+ * t4) is always shown from mini node to mini node; hovering a requirement
+ * highlights its path. The marker defs are declared once in the board
+ * (see markerDefs below); this component only switches the url() reference
+ * by hover state. */
 function FlowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<FlowEdgeData>>) {
   const { related } = useContext(HoverFocusContext)
   const taskId = data?.taskId ?? ''
   const depId = data?.depId ?? ''
   const label = data?.label ?? ''
-  // Keep the edge mounted: React Flow does not re-render an edge that
-  // rendered null, so hiding must be done via style, not by returning null.
-  const hidden = related === null
   const hot = related !== null && related.has(taskId) && related.has(depId)
   const dimmed = related !== null && !hot
   const [path, labelX, labelY] = getBezierPath({
@@ -500,19 +498,17 @@ function FlowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
         style={{
           stroke: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
           strokeWidth: hot ? 2.5 : 1.5,
-          opacity: hidden ? 0 : dimmed ? 0.12 : hot ? 1 : 0.7,
-          visibility: hidden ? 'hidden' : 'visible',
+          opacity: dimmed ? 0.12 : hot ? 1 : 0.7,
         }}
       />
       <EdgeLabelRenderer>
         <div
           className={css.edgeLabel}
           data-hot={hot}
-          data-dimmed={hidden ? false : dimmed}
+          data-dimmed={dimmed}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            opacity: hidden ? 0 : 1,
             pointerEvents: 'none',
           }}
         >
@@ -632,15 +628,15 @@ export function FlowBoard({ team, onNavigate }: {
       setHoverLinkPath(null)
       return
     }
-    const holder = currentHolderOf(requirement)
-    if (holder === '待认领' || holder === '已收齐') {
-      setHoverLinkPath(null)
-      return
-    }
     const measure = (): void => {
       const railItem = layout.querySelector<HTMLElement>(`[data-rail-task="${focusedRequirementId}"]`)
-      const orb = layout.querySelector<HTMLElement>(`[data-worker-node][data-worker-name="${holder}"]`)
-      if (railItem === null || orb === null) {
+      // The link starts from the requirement's first stage (its origin, e.g.
+      // t2), not from the stage currently in progress.
+      const origin = requirement.stages[0]
+      const orb = origin !== undefined && origin.assignee !== ''
+        ? layout.querySelector<HTMLElement>(`[data-worker-node][data-worker-name="${origin.assignee}"]`)
+        : null
+      if (railItem === null || orb === null || origin === undefined) {
         setHoverLinkPath(null)
         return
       }
@@ -649,13 +645,10 @@ export function FlowBoard({ team, onNavigate }: {
       const orbRect = orb.getBoundingClientRect()
       const x1 = railRect.right - layoutRect.left
       const y1 = railRect.top + railRect.height / 2 - layoutRect.top
-      // Target the requirement's mini orb inside the handler node (the
-      // stage ball the worker is executing), falling back to the node's
-      // left rim when the orb is not rendered.
-      const holderTask = requirement.stages.find((stage) => stage.assignee === holder)
-      const orbEl = holderTask !== undefined
-        ? [...orb.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent.trim() === holderTask.id)
-        : undefined
+      // Target the origin stage's mini orb inside its node, falling back to
+      // the node's left rim when the orb is not rendered.
+      const orbEl = [...orb.querySelectorAll<HTMLElement>('button')]
+        .find((button) => button.textContent.trim() === origin.id)
       const targetRect = orbEl !== undefined ? orbEl.getBoundingClientRect() : undefined
       const x2 = targetRect !== undefined ? targetRect.left - layoutRect.left : orbRect.left - layoutRect.left
       const y2 = targetRect !== undefined
@@ -663,7 +656,7 @@ export function FlowBoard({ team, onNavigate }: {
         : orbRect.top + orbRect.height / 2 - layoutRect.top
       // Every other orb is an obstacle: the link may never cross a node.
       const obstacles: Box[] = [...layout.querySelectorAll<HTMLElement>('[data-worker-node]')]
-        .filter((el) => el.dataset.workerName !== holder)
+        .filter((el) => el.dataset.workerName !== origin.assignee)
         .map((el) => {
           const rect = el.getBoundingClientRect()
           return {
