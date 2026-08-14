@@ -29,16 +29,18 @@ const STATE_URL = '/plugins/dsh-agent-teams/state'
 /** Class marker for the injected conversation tab. */
 export const BOARD_TAB_CLASS = 'dsh-agent-teams-board-tab'
 /** Style tag id for the injected tab's global stylesheet. */
-const BOARD_TAB_STYLE_ID = 'dsh-agent-teams-board-tab-styles'
-/** Global stylesheet for the injected tab (mirrors the shell tab look
- * without depending on the shell's hashed class names; the css-module
- * pipeline cannot emit these `::after` rules). */
-const BOARD_TAB_CSS = `
+const BOARD_GLOBAL_STYLE_ID = 'dsh-agent-teams-board-global-styles'
+/** Global stylesheet: the injected tab (mirrors the shell tab look without
+ * depending on the shell's hashed class names; the css-module pipeline
+ * cannot emit these `::after` rules) and the board panel placeholder that
+ * replaces the conversation content while the board tab is active. */
+const BOARD_GLOBAL_CSS = `
 .${BOARD_TAB_CLASS}{position:relative;padding:0 0 11px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:13px;font-weight:500;line-height:16px;cursor:pointer}
 .${BOARD_TAB_CLASS}:hover{color:var(--dsw-alias-label-primary)}
 .${BOARD_TAB_CLASS}::after{position:absolute;right:0;bottom:1px;left:0;height:2px;border-radius:2px;background:transparent;content:''}
 .${BOARD_TAB_CLASS}[aria-selected='true']{color:var(--dsw-alias-state-business-primary)}
 .${BOARD_TAB_CLASS}[aria-selected='true']::after{background:var(--dsw-alias-state-business-primary)}
+[data-agent-teams-board-panel]{flex:1 1 auto;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;box-sizing:border-box;padding:12px 16px;background:var(--dsw-alias-bg-module-platform)}
 `
 
 /** One task card in a board column. */
@@ -159,39 +161,43 @@ export function findConversationTabBar(): HTMLElement | null {
   return null
 }
 
-/** Pixel rect of the conversation root below its tab bar. */
-interface OverlayRect {
-  readonly top: number
-  readonly left: number
-  readonly width: number
-  readonly height: number
+/** The conversation header (tab bar + title row) hosting the tab bar. */
+function findConversationHeader(tabBar: HTMLElement): HTMLElement | null {
+  let el: HTMLElement | null = tabBar.parentElement
+  while (el !== null && el.tagName !== 'HEADER') el = el.parentElement
+  return el
 }
 
-function computeOverlayRect(): OverlayRect | null {
-  const tabBar = findConversationTabBar()
-  if (tabBar === null) return null
-  const barRect = tabBar.getBoundingClientRect()
-  // The conversation root is the first ancestor tall enough to span the
-  // viewport (the tab bar's parent header is the same width, so width
-  // cannot distinguish them; height can).
+/** The conversation root: the first ancestor tall enough to span the
+ * viewport (the header is the same width, so width cannot distinguish
+ * them; height can). */
+function findConversationRoot(tabBar: HTMLElement): HTMLElement | null {
   const viewportHeight = window.innerHeight
   let root: HTMLElement | null = tabBar.parentElement
   while (root !== null && root.getBoundingClientRect().height < viewportHeight * 0.8) root = root.parentElement
-  if (root === null) return null
-  const rootRect = root.getBoundingClientRect()
-  return {
-    top: barRect.bottom,
-    left: rootRect.left,
-    width: rootRect.width,
-    height: Math.max(0, rootRect.bottom - barRect.bottom),
-  }
+  return root
 }
 
 /**
- * The main-interface task board: injects the 任务看板 tab and renders the
- * board overlay while the tab is active. The overlay follows the current
- * session (captain or member), polls the host snapshot route, and closes on
- * session switch or when another conversation tab is picked.
+ * The conversation content panel: the root's sibling right after the
+ * header's wrapper. Hidden while the board tab is active so the board is a
+ * real page switch, not an overlay.
+ */
+function findContentPanel(root: HTMLElement, header: HTMLElement): HTMLElement | null {
+  const wrapper = header.parentElement
+  if (wrapper === null) return null
+  const content = wrapper.nextElementSibling
+  return content instanceof HTMLElement && root.contains(content) ? content : null
+}
+
+/**
+ * The main-interface task board: injects the 任务看板 tab and, while the
+ * tab is active, replaces the conversation content panel with the board
+ * (the shell exposes no tab extension point, so the tab is injected by
+ * relative DOM location and kept alive across shell re-renders by a
+ * MutationObserver). The board follows the current session (captain or
+ * member), polls the host snapshot route, and closes on session switch or
+ * when another conversation tab is picked.
  */
 export function BoardOverlay({ sessionsList, openSession }: {
   readonly sessionsList: ObservableSnapshot<SessionListState>
@@ -199,7 +205,7 @@ export function BoardOverlay({ sessionsList, openSession }: {
 }) {
   const [open, setOpen] = useState(false)
   const [teams, setTeams] = useState<readonly ActivityTeam[]>([])
-  const [rect, setRect] = useState<OverlayRect | null>(null)
+  const [panelEl, setPanelEl] = useState<HTMLElement | null>(null)
   const openRef = useRef(false)
   openRef.current = open
   const current = useSyncExternalStore(
@@ -237,14 +243,40 @@ export function BoardOverlay({ sessionsList, openSession }: {
   // Session switch closes the board (the shell resets to Chat on navigation).
   useEffect(() => { setOpen(false) }, [current])
 
+  // Replace the conversation content with the board panel while open.
+  useEffect(() => {
+    if (!open) return
+    const tabBar = findConversationTabBar()
+    if (tabBar === null) return
+    const root = findConversationRoot(tabBar)
+    const header = findConversationHeader(tabBar)
+    if (root === null || header === null) return
+    const content = findContentPanel(root, header)
+    const previousDisplay = content?.style.display
+    if (content !== null) content.style.display = 'none'
+    let panel = root.querySelector<HTMLElement>('[data-agent-teams-board-panel]')
+    if (panel === null) {
+      panel = document.createElement('div')
+      panel.dataset.agentTeamsBoardPanel = ''
+      root.appendChild(panel)
+    }
+    setPanelEl(panel)
+    return () => {
+      if (content !== null && previousDisplay !== undefined) content.style.display = previousDisplay
+      const existing = root.querySelector('[data-agent-teams-board-panel]')
+      if (existing !== null) existing.remove()
+      setPanelEl(null)
+    }
+  }, [open])
+
   // Inject the tab, keep it alive across shell re-renders, and close when
   // another conversation tab is picked.
   useEffect(() => {
-    if (document.getElementById(BOARD_TAB_STYLE_ID) === null) {
+    if (document.getElementById(BOARD_GLOBAL_STYLE_ID) === null) {
       const style = document.createElement('style')
-      style.id = BOARD_TAB_STYLE_ID
+      style.id = BOARD_GLOBAL_STYLE_ID
       style.dataset.plugin = 'dsh-agent-teams'
-      style.textContent = BOARD_TAB_CSS
+      style.textContent = BOARD_GLOBAL_CSS
       document.head.appendChild(style)
     }
     const ensureTab = (): void => {
@@ -257,14 +289,10 @@ export function BoardOverlay({ sessionsList, openSession }: {
       tab.className = BOARD_TAB_CLASS
       tab.textContent = '任务看板'
       tab.addEventListener('click', () => {
-        setRect(computeOverlayRect())
         setOpen(true)
       })
       tabBar.appendChild(tab)
     }
-    ensureTab()
-    const observer = new MutationObserver(() => { ensureTab() })
-    observer.observe(document.body, { childList: true, subtree: true })
     const onCaptureClick = (event: Event): void => {
       const target = event.target as HTMLElement | null
       const tab = target?.closest<HTMLElement>('[role="tab"]')
@@ -272,6 +300,31 @@ export function BoardOverlay({ sessionsList, openSession }: {
         setOpen(false)
       }
     }
+    ensureTab()
+    const observer = new MutationObserver(() => {
+      ensureTab()
+      // A shell re-render may have dropped the board panel while the tab is
+      // active; re-apply the page switch.
+      if (openRef.current) {
+        const tabBar = findConversationTabBar()
+        if (tabBar !== null) {
+          const root = findConversationRoot(tabBar)
+          const header = findConversationHeader(tabBar)
+          if (root !== null && header !== null) {
+            const content = findContentPanel(root, header)
+            if (content !== null) content.style.display = 'none'
+            let panel = root.querySelector<HTMLElement>('[data-agent-teams-board-panel]')
+            if (panel === null) {
+              panel = document.createElement('div')
+              panel.dataset.agentTeamsBoardPanel = ''
+              root.appendChild(panel)
+            }
+            setPanelEl(panel)
+          }
+        }
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
     document.addEventListener('click', onCaptureClick, true)
     return () => {
       observer.disconnect()
@@ -288,28 +341,15 @@ export function BoardOverlay({ sessionsList, openSession }: {
     else tab.removeAttribute('aria-selected')
   }, [open])
 
-  // Keep the overlay aligned with the conversation root while open.
-  useEffect(() => {
-    if (!open) return
-    const update = (): void => { setRect(computeOverlayRect()) }
-    update()
-    window.addEventListener('resize', update)
-    return () => { window.removeEventListener('resize', update) }
-  }, [open])
-
   const visibleTeams = current === undefined ? [] : teams.filter((team) => teamVisibleTo(team, current))
-  if (!open || rect === null || visibleTeams.length === 0) return null
+  if (!open || panelEl === null || visibleTeams.length === 0) return null
 
   return createPortal(
-    <div
-      className={css.overlay}
-      data-board-overlay
-      style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
-    >
+    <>
       {visibleTeams.map((team) => (
         <KanbanBoard key={team.teamId} team={team} onNavigate={(id: SessionId) => { openSession(id) }} />
       ))}
-    </div>,
-    document.body,
+    </>,
+    panelEl,
   )
 }

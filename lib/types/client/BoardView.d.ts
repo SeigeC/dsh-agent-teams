@@ -36,10 +36,13 @@ export declare function KanbanBoard({ team, onNavigate }: {
  */
 export declare function findConversationTabBar(): HTMLElement | null;
 /**
- * The main-interface task board: injects the 任务看板 tab and renders the
- * board overlay while the tab is active. The overlay follows the current
- * session (captain or member), polls the host snapshot route, and closes on
- * session switch or when another conversation tab is picked.
+ * The main-interface task board: injects the 任务看板 tab and, while the
+ * tab is active, replaces the conversation content panel with the board
+ * (the shell exposes no tab extension point, so the tab is injected by
+ * relative DOM location and kept alive across shell re-renders by a
+ * MutationObserver). The board follows the current session (captain or
+ * member), polls the host snapshot route, and closes on session switch or
+ * when another conversation tab is picked.
  */
 export declare function BoardOverlay({ sessionsList, openSession }: {
     readonly sessionsList: ObservableSnapshot<SessionListState>;
