@@ -208,16 +208,20 @@
 }
 
 .edgeArrow {
-  /* Follow the stroked line's color (blue when the flow is highlighted). */
-  fill: context-stroke;
+  /* Fixed dark fill and full opacity: markers inherit the referencing
+   * path's opacity (the handler link is a 0.7 dashed line), which would
+   * wash the arrow out. */
+  fill: var(--dsw-alias-label-secondary);
+  opacity: 1;
 }
 
 .handlerLink {
+  /* Opacity on the path would wash out its arrow marker too (group
+   * compositing), so the subdued look comes from the stroke color. */
   fill: none;
-  stroke: var(--dsw-alias-border-l3);
+  stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 30%, transparent);
   stroke-width: 1.25px;
   stroke-dasharray: 4 3;
-  opacity: 0.7;
   transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
 }
 

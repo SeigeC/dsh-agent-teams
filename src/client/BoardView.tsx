@@ -434,14 +434,14 @@ export function FlowBoard({ team, onNavigate }: {
           <defs>
             <marker
               id={`at-flow-arrow-${team.teamId}`}
-              viewBox="0 0 12 12"
-              refX="10"
-              refY="6"
-              markerWidth="11"
-              markerHeight="11"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="8"
+              markerHeight="8"
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 12 6 L 0 12 z" className={css.edgeArrow} />
+              <path d="M 0 0 L 10 5 L 0 10 z" className={css.edgeArrow} />
             </marker>
           </defs>
           {edges.map((edge) => {
