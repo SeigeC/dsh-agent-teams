@@ -11,9 +11,9 @@
  * @module dsh-agent-teams/client/board
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Handle, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, Handle, MarkerType, Position, ReactFlow, type Edge, type EdgeProps, type Node } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ObservableSnapshot, SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
@@ -376,25 +376,35 @@ function RequirementRail({ requirements, focusedRequirementId, related, onFocus,
 
 
 
-/** React Flow node payload for a worker orb. */
+/** React Flow node payload for a worker orb. Deliberately free of the
+ * hover focus: nodes/edges arrays keep a stable reference across hover
+ * state changes, so React Flow never rebuilds node DOM under the mouse
+ * (which would fire mouseleave and loop the hover state). */
 interface WorkerOrbData {
   readonly member: ActivityMember
   readonly tasks: readonly ActivityTask[]
-  readonly focusedRelated: ReadonlySet<string> | null
   readonly onFocus: (taskId: string) => void
   readonly onBlur: () => void
   readonly onNavigate: (id: SessionId) => void
 }
 
+/** Hover focus shared with node/edge components without touching React
+ * Flow's controlled props (see WorkerOrbData). */
+const HoverFocusContext = createContext<{ readonly id: string | null; readonly related: ReadonlySet<string> | null }>({
+  id: null,
+  related: null,
+})
+
 /** Custom node renderer: the worker orb (big ball with requirement orbs). */
 function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
+  const { related } = useContext(HoverFocusContext)
   return (
     <div className={css.nodeWrap}>
       <Handle type="target" position={Position.Left} className={css.nodeHandle} />
       <WorkerNode
         member={data.member}
         tasks={data.tasks}
-        focusedRelated={data.focusedRelated}
+        focusedRelated={related}
         onFocus={data.onFocus}
         onBlur={data.onBlur}
         onNavigate={data.onNavigate}
@@ -404,8 +414,83 @@ function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
   )
 }
 
-/** Stable node type registry (React Flow requires a constant reference). */
+/** React Flow edge payload: static per team (hover state is read from
+ * HoverFocusContext inside the edge component, keeping the edges array
+ * reference stable across hover changes). */
+interface FlowEdgeData extends Record<string, unknown> {
+  readonly taskId: string
+  readonly depId: string
+  readonly label: string
+}
+
+/** Custom edge renderer: bezier path with arrow marker and a label; reads
+ * the hover focus from context so the edges array never changes on hover.
+ * The marker defs are declared once in the board (see markerDefs below);
+ * this component only switches the url() reference by hover state. */
+function FlowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<FlowEdgeData>>) {
+  const { related } = useContext(HoverFocusContext)
+  const taskId = data?.taskId ?? ''
+  const depId = data?.depId ?? ''
+  const label = data?.label ?? ''
+  const hot = related !== null && related.has(taskId) && related.has(depId)
+  const dimmed = related !== null && !hot
+  const [path, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  })
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        markerEnd={hot ? 'url(#dsh-agent-teams-arrow-hot)' : 'url(#dsh-agent-teams-arrow-base)'}
+        style={{
+          stroke: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
+          strokeWidth: hot ? 2.5 : 1.5,
+          opacity: dimmed ? 0.12 : hot ? 1 : 0.7,
+        }}
+      />
+      <EdgeLabelRenderer>
+        <div
+          className={css.edgeLabel}
+          data-hot={hot}
+          data-dimmed={dimmed}
+          style={{
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+          }}
+        >
+          <span className={css.edgeLabelBg}>{label}</span>
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  )
+}
+
+/** Stable registries (React Flow requires constant references). */
 const workerOrbNodeTypes = { workerOrb: WorkerOrbNode }
+const flowEdgeTypes = { flow: FlowEdge }
+
+/** Shared arrow marker definitions for the flow edges (React Flow custom
+ * edges receive a marker url string, so the defs live here once). */
+function EdgeMarkerDefs() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+      <defs>
+        <marker id="dsh-agent-teams-arrow-base" viewBox="0 0 16 16" refX="14" refY="8" markerWidth="16" markerHeight="16" orient="auto-start-reverse">
+          <path d="M 0 0 L 16 8 L 0 16 z" fill="var(--dsw-alias-label-secondary)" />
+        </marker>
+        <marker id="dsh-agent-teams-arrow-hot" viewBox="0 0 16 16" refX="14" refY="8" markerWidth="16" markerHeight="16" orient="auto-start-reverse">
+          <path d="M 0 0 L 16 8 L 0 16 z" fill="var(--dsw-alias-state-business-primary)" />
+        </marker>
+      </defs>
+    </svg>
+  )
+}
 
 /** Node box used by the dagre layout (orb + name + meta below). */
 const ORB_NODE_WIDTH = 148
@@ -462,9 +547,9 @@ export function FlowBoard({ team, onNavigate }: {
     }
     return map
   }, [requirements])
-  const focusRequirementOf = (taskId: string): void => {
+  const focusRequirementOf = useCallback((taskId: string): void => {
     setFocusedRequirementId(requirementByTask.get(taskId) ?? null)
-  }
+  }, [requirementByTask])
   const blur = useCallback(() => { setFocusedRequirementId(null) }, [])
   const related = useMemo(() => {
     if (focusedRequirementId === null) return null
@@ -532,6 +617,10 @@ export function FlowBoard({ team, onNavigate }: {
     }
   }, [focusedRequirementId, requirements])
 
+  // nodes/edges arrays depend only on team data (never on hover state):
+  // React Flow therefore never rebuilds DOM under the mouse, so hover
+  // focus changes cannot loop through mouseleave. Hover state travels via
+  // HoverFocusContext instead.
   const nodes = useMemo<Node[]>(() => team.members.map((member) => ({
     id: member.name,
     type: 'workerOrb',
@@ -539,39 +628,23 @@ export function FlowBoard({ team, onNavigate }: {
     data: {
       member,
       tasks: team.tasks,
-      focusedRelated: related,
       onFocus: focusRequirementOf,
       onBlur: blur,
       onNavigate,
     } satisfies WorkerOrbData,
-  })), [team.members, team.tasks, positions, related, blur, onNavigate])
+  })), [team.members, team.tasks, positions, focusRequirementOf, blur, onNavigate])
 
-  const edges = useMemo<Edge[]>(() => buildEdges(team.tasks).map((edge) => {
-    const hot = related !== null && related.has(edge.task.id) && related.has(edge.dep.id)
-    const dimmed = related !== null && !hot
-    return {
-      id: edge.id,
-      source: edge.from,
-      target: edge.to,
-      type: 'default',
+  const edges = useMemo<Edge[]>(() => buildEdges(team.tasks).map((edge) => ({
+    id: edge.id,
+    source: edge.from,
+    target: edge.to,
+    type: 'flow',
+    data: {
+      taskId: edge.task.id,
+      depId: edge.dep.id,
       label: edge.task.id,
-      labelStyle: { fill: 'var(--dsw-alias-label-secondary)', fontWeight: 600, fontSize: 10 },
-      labelBgStyle: { fill: 'var(--dsw-alias-bg-base)', stroke: 'var(--dsw-alias-border-l2)', strokeWidth: 1 },
-      labelBgPadding: [4, 3],
-      labelBgBorderRadius: 8,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        width: 16,
-        height: 16,
-        color: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
-      },
-      style: {
-        stroke: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
-        strokeWidth: hot ? 2.5 : 1.5,
-        opacity: dimmed ? 0.12 : hot ? 1 : 0.7,
-      },
-    }
-  }), [team.tasks, related])
+    } satisfies FlowEdgeData,
+  })), [team.tasks])
 
   const markerId = `dsh-agent-teams-hover-arrow-${team.teamId.replace(/[^a-zA-Z0-9_-]/g, '')}`
 
@@ -596,24 +669,28 @@ export function FlowBoard({ team, onNavigate }: {
         />
 
         <div className={css.flowArea}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={workerOrbNodeTypes}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            panOnDrag={false}
-            zoomOnScroll={false}
-            zoomOnPinch={false}
-            zoomOnDoubleClick={false}
-            fitView
-            fitViewOptions={{ padding: 0.12 }}
-            minZoom={0.5}
-            maxZoom={2}
-            proOptions={{ hideAttribution: false }}
-            className={css.flowCanvas}
-          />
+          <EdgeMarkerDefs />
+          <HoverFocusContext.Provider value={{ id: focusedRequirementId, related }}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={workerOrbNodeTypes}
+              edgeTypes={flowEdgeTypes}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={false}
+              panOnDrag={false}
+              zoomOnScroll={false}
+              zoomOnPinch={false}
+              zoomOnDoubleClick={false}
+              fitView
+              fitViewOptions={{ padding: 0.12 }}
+              minZoom={0.5}
+              maxZoom={2}
+              proOptions={{ hideAttribution: false }}
+              className={css.flowCanvas}
+            />
+          </HoverFocusContext.Provider>
         </div>
 
         {hoverLinkPath !== null && (
@@ -731,8 +808,12 @@ export function BoardOverlay({ sessionsList, openSession }: {
     sessionsList.subscribe,
     sessionsList.getSnapshot,
   ).current
+  /** Stable navigate callback: a new function identity would re-create the
+   * React Flow node payloads (and their DOM) on every board re-render. */
+  const navigate = useCallback((id: SessionId) => { openSession(id) }, [openSession])
 
-  // Poll host snapshots.
+  // Poll host snapshots. Keep the previous array reference when the payload
+  // is unchanged, so re-renders do not rebuild the flow DOM (see navigate).
   useEffect(() => {
     let cancelled = false
     let inFlight = false
@@ -743,7 +824,15 @@ export function BoardOverlay({ sessionsList, openSession }: {
         const response = await fetch(STATE_URL, { cache: 'no-store' })
         if (response.ok) {
           const body = (await response.json()) as { teams?: unknown }
-          if (!cancelled && Array.isArray(body.teams)) setTeams(body.teams as readonly ActivityTeam[])
+          if (!cancelled && Array.isArray(body.teams)) {
+            setTeams((previous) => {
+              const next = body.teams as readonly ActivityTeam[]
+              if (previous.length === next.length && JSON.stringify(previous) === JSON.stringify(next)) {
+                return previous
+              }
+              return next
+            })
+          }
         }
       } catch {
         // Host restarting; keep the last snapshot.
@@ -913,7 +1002,7 @@ export function BoardOverlay({ sessionsList, openSession }: {
   return createPortal(
     <>
       {visibleTeams.map((team) => (
-        <FlowBoard key={team.teamId} team={team} onNavigate={(id: SessionId) => { openSession(id) }} />
+        <FlowBoard key={team.teamId} team={team} onNavigate={navigate} />
       ))}
     </>,
     panelEl,

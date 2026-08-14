@@ -286,30 +286,30 @@
 
 
 .edgeLabel {
-  pointer-events: auto;
-  cursor: pointer;
+  display: inline-flex;
+  pointer-events: none;
+  user-select: none;
   transition: opacity 120ms ease;
 }
 
 .edgeLabelBg {
-  fill: var(--dsw-alias-bg-base);
-  stroke: var(--dsw-alias-border-l2);
-  stroke-width: 1px;
-}
-
-.edgeLabelText {
-  fill: var(--dsw-alias-label-secondary);
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
   font-size: 10px;
   font-weight: 600;
+  line-height: 15px;
 }
 
 .edgeLabel[data-hot='true'] .edgeLabelBg {
-  fill: var(--dsw-alias-state-business-tertiary);
-  stroke: var(--dsw-alias-state-business-primary);
-}
-
-.edgeLabel[data-hot='true'] .edgeLabelText {
-  fill: var(--dsw-alias-state-business-primary);
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .edgeLabel[data-dimmed='true'] {
