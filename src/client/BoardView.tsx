@@ -75,7 +75,38 @@ function buildEdges(tasks: readonly ActivityTask[]): FlowEdge[] {
   return edges
 }
 
-/** One worker node: avatar, name, live state, and the requirements on it. */
+/** Max requirement orbs rendered inside one worker orb (+N for the rest). */
+const TASK_ORB_COUNT = 6
+
+/** One requirement orb: a small ball nested inside its worker orb. */
+function TaskOrb({ task, tasks, dimmed, hot, onFocus, onBlur }: {
+  readonly task: ActivityTask
+  readonly tasks: readonly ActivityTask[]
+  readonly dimmed: boolean
+  readonly hot: boolean
+  readonly onFocus: (taskId: string) => void
+  readonly onBlur: () => void
+}) {
+  const tone = taskTone(task.state, task.status)
+  return (
+    <button
+      type="button"
+      className={css.taskOrb}
+      data-state={tone}
+      data-dimmed={dimmed}
+      data-hot={hot}
+      title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, tasks)}` : ''}`}
+      onMouseEnter={() => { onFocus(task.id) }}
+      onMouseLeave={onBlur}
+      onFocus={() => { onFocus(task.id) }}
+      onBlur={onBlur}
+    >
+      {task.id}
+    </button>
+  )
+}
+
+/** One worker orb: the big ball holding its requirement orbs inside. */
 function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate }: {
   readonly member: ActivityMember
   readonly tasks: readonly ActivityTask[]
@@ -86,58 +117,66 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
 }) {
   const owned = tasks.filter((task) => task.assignee === member.name)
   const involved = focusedRelated === null || owned.some((task) => focusedRelated.has(task.id))
+  const visible = owned.slice(0, TASK_ORB_COUNT)
+  const overflow = owned.length - visible.length
+  const angleStep = visible.length <= 1 ? 0 : 360 / visible.length
   return (
-    <div
-      className={css.workerNode}
-      data-worker-node
-      data-worker-name={member.name}
-      data-dimmed={focusedRelated !== null && !involved}
-      data-hot={focusedRelated !== null && involved}
-    >
-      <button
-        type="button"
-        className={css.workerHead}
-        onClick={() => { if (member.id !== '') onNavigate(member.id as SessionId) }}
-        title={`${member.name} · ${memberStatusText(member, tasks)}`}
+    <div className={css.workerSlot}>
+      <div
+        className={css.workerOrb}
+        data-worker-node
+        data-worker-name={member.name}
+        data-activity={member.activity}
+        data-dimmed={focusedRelated !== null && !involved}
+        data-hot={focusedRelated !== null && involved}
       >
-        <span className={css.workerAvatar} data-activity={member.activity}>
+        <button
+          type="button"
+          className={css.orbAvatar}
+          onClick={() => { if (member.id !== '') onNavigate(member.id as SessionId) }}
+          title={`${member.name} · ${memberStatusText(member, tasks)}`}
+        >
           {memberArtUrl(member.name, member.role) !== null ? (
-            <img className={css.workerArt} src={memberArtUrl(member.name, member.role) ?? ''} alt="" aria-hidden />
+            <img className={css.orbArt} src={memberArtUrl(member.name, member.role) ?? ''} alt="" aria-hidden />
           ) : (
-            <span className={css.workerInitial} style={{ background: accentOf(member.id) }}>{memberInitial(member.name)}</span>
+            <span className={css.orbInitial} style={{ background: accentOf(member.id) }}>{memberInitial(member.name)}</span>
           )}
-        </span>
-        <span className={css.workerInfo}>
-          <span className={css.workerName}>{member.name}</span>
-          <span className={css.workerRole}>{member.role}</span>
-        </span>
-        <span className={css.workerDot}><StateDot state={memberDotState(member, tasks)} /></span>
-        {member.unread > 0 && <span className={css.unreadPill}>{member.unread}</span>}
-      </button>
-      <div className={css.workerStatus} data-activity={member.activity}>{memberStateLabel(member, tasks)}</div>
-      <div className={css.workerTasks}>
-        {owned.length === 0 && <span className={css.taskEmpty}>暂无任务</span>}
-        {owned.map((task) => (
-          <button
-            type="button"
-            key={task.id}
-            className={css.taskChip}
-            data-state={taskTone(task.state, task.status)}
-            data-dimmed={focusedRelated !== null && !focusedRelated.has(task.id)}
-            title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, tasks)}` : ''}`}
-            onMouseEnter={() => { onFocus(task.id) }}
-            onMouseLeave={onBlur}
-            onFocus={() => { onFocus(task.id) }}
-            onBlur={onBlur}
-          >
-            <span className={css.taskChipId}>{task.id}</span>
-            <span className={css.taskBadge} data-state={taskTone(task.state, task.status)}>{taskStatusLabel(task.status)}</span>
-          </button>
-        ))}
+        </button>
+        {visible.length > 0 && (
+          <div className={css.orbTasks}>
+            {visible.map((task, index) => (
+              <span
+                key={task.id}
+                className={css.orbTaskSlot}
+                style={visible.length > 1
+                  ? { transform: `rotate(${index * angleStep}deg) translate(38px) rotate(${-index * angleStep}deg)` }
+                  : undefined}
+              >
+                <TaskOrb
+                  task={task}
+                  tasks={tasks}
+                  dimmed={focusedRelated !== null && !focusedRelated.has(task.id)}
+                  hot={focusedRelated !== null && focusedRelated.has(task.id)}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                />
+              </span>
+            ))}
+          </div>
+        )}
+        {overflow > 0 && (
+          <span className={css.orbOverflow} title={owned.slice(TASK_ORB_COUNT).map((task) => `${task.id} ${task.subject}`).join('\n')}>
+            +{overflow}
+          </span>
+        )}
+        {member.unread > 0 && <span className={css.orbUnread}>{member.unread}</span>}
       </div>
+      <div className={css.workerName} title={member.name}>{member.name}</div>
     </div>
   )
 }
+
+
 
 /**
  * Board content for one team: one node per worker, requirement edges drawn
@@ -217,21 +256,15 @@ export function FlowBoard({ team, onNavigate }: {
         <div className={css.unassignedBar}>
           <span className={css.unassignedLabel}>待认领</span>
           {unassigned.map((task) => (
-            <button
-              type="button"
+            <TaskOrb
               key={task.id}
-              className={css.taskChip}
-              data-state={taskTone(task.state, task.status)}
-              data-dimmed={related !== null && !related.has(task.id)}
-              title={`${task.id} ${task.subject}`}
-              onMouseEnter={() => { setFocusedTaskId(task.id) }}
-              onMouseLeave={() => { setFocusedTaskId(null) }}
-              onFocus={() => { setFocusedTaskId(task.id) }}
+              task={task}
+              tasks={team.tasks}
+              dimmed={related !== null && !related.has(task.id)}
+              hot={related !== null && related.has(task.id)}
+              onFocus={setFocusedTaskId}
               onBlur={() => { setFocusedTaskId(null) }}
-            >
-              <span className={css.taskChipId}>{task.id}</span>
-              <span className={css.taskBadge} data-state={taskTone(task.state, task.status)}>{taskStatusLabel(task.status)}</span>
-            </button>
+            />
           ))}
         </div>
       )}
