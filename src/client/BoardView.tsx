@@ -190,6 +190,18 @@ function findContentPanel(root: HTMLElement, header: HTMLElement): HTMLElement |
   return content instanceof HTMLElement && root.contains(content) ? content : null
 }
 
+/** The shell's active-tab class (hashed prefix, stable `tabActive` local
+ * name) on one tab element, if any. */
+function shellActiveTabClass(tab: HTMLElement): string | undefined {
+  return [...tab.classList].find((name) => name.endsWith('tabActive'))
+}
+
+/** The shell-owned tabs of the conversation tab bar (ours excluded). */
+function shellTabsOf(tabBar: HTMLElement): HTMLElement[] {
+  return [...tabBar.querySelectorAll<HTMLElement>('[role="tab"]')]
+    .filter((tab) => !tab.classList.contains(BOARD_TAB_CLASS))
+}
+
 /**
  * The main-interface task board: injects the 任务看板 tab and, while the
  * tab is active, replaces the conversation content panel with the board
@@ -208,6 +220,9 @@ export function BoardOverlay({ sessionsList, openSession }: {
   const [panelEl, setPanelEl] = useState<HTMLElement | null>(null)
   const openRef = useRef(false)
   openRef.current = open
+  /** The shell tab that was active before the board opened (restored on
+   * close unless the shell already re-activated a tab itself). */
+  const savedActiveRef = useRef<{ readonly text: string; readonly cls: string } | null>(null)
   const current = useSyncExternalStore(
     sessionsList.subscribe,
     sessionsList.getSnapshot,
@@ -242,6 +257,38 @@ export function BoardOverlay({ sessionsList, openSession }: {
 
   // Session switch closes the board (the shell resets to Chat on navigation).
   useEffect(() => { setOpen(false) }, [current])
+
+  // While the board tab is active, clear the shell tabs' active styles so
+  // Chat/Trajectory don't stay highlighted; restore the previously active
+  // shell tab on close (unless the shell already re-activated one).
+  useEffect(() => {
+    const tabBar = findConversationTabBar()
+    if (tabBar === null) return
+    const shellTabs = shellTabsOf(tabBar)
+    if (open) {
+      savedActiveRef.current = null
+      for (const tab of shellTabs) {
+        const activeClass = shellActiveTabClass(tab)
+        if (activeClass !== undefined) {
+          if (savedActiveRef.current === null) {
+            savedActiveRef.current = { text: (tab.textContent ?? '').trim(), cls: activeClass }
+          }
+          tab.classList.remove(activeClass)
+          tab.setAttribute('aria-selected', 'false')
+        }
+      }
+    } else {
+      const restored = savedActiveRef.current
+      savedActiveRef.current = null
+      if (restored !== null && shellTabs.every((tab) => shellActiveTabClass(tab) === undefined)) {
+        const target = shellTabs.find((tab) => (tab.textContent ?? '').trim() === restored.text)
+        if (target !== undefined) {
+          target.classList.add(restored.cls)
+          target.setAttribute('aria-selected', 'true')
+        }
+      }
+    }
+  }, [open])
 
   // Replace the conversation content with the board panel while open.
   useEffect(() => {
@@ -304,10 +351,15 @@ export function BoardOverlay({ sessionsList, openSession }: {
     const observer = new MutationObserver(() => {
       ensureTab()
       // A shell re-render may have dropped the board panel while the tab is
-      // active; re-apply the page switch.
+      // active; re-apply the page switch (and clear any shell tab active
+      // style the re-render restored).
       if (openRef.current) {
         const tabBar = findConversationTabBar()
         if (tabBar !== null) {
+          for (const tab of shellTabsOf(tabBar)) {
+            const activeClass = shellActiveTabClass(tab)
+            if (activeClass !== undefined) tab.classList.remove(activeClass)
+          }
           const root = findConversationRoot(tabBar)
           const header = findConversationHeader(tabBar)
           if (root !== null && header !== null) {
