@@ -183,7 +183,10 @@ function TaskOrb({ task, tasks, dimmed, hot, onFocus, onBlur }: {
   )
 }
 
-/** One worker orb: the big ball holding its requirement orbs inside. */
+/** One worker orb: the big ball holding its requirement orbs inside. Only
+ * the requirement currently being executed shows a mini orb by default, so
+ * the board reads at a glance; hovering a requirement reveals all of its
+ * stage orbs (with the flow edges between them). */
 function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate }: {
   readonly member: ActivityMember
   readonly tasks: readonly ActivityTask[]
@@ -194,9 +197,14 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
 }) {
   const owned = tasks.filter((task) => task.assignee === member.name)
   const involved = focusedRelated === null || owned.some((task) => focusedRelated.has(task.id))
-  const visible = owned.slice(0, TASK_ORB_COUNT)
+  // Default: only the running stage. While a requirement is focused, show
+  // every one of its stages this worker owns (the flow path).
+  const visible = (focusedRelated !== null
+    ? owned.filter((task) => focusedRelated.has(task.id))
+    : owned.filter((task) => task.status === 'in_progress'))
+    .slice(0, TASK_ORB_COUNT)
   const overflow = owned.length - visible.length
-  // All orbs sit on the ring (a single orb lands at 12 o'clock), so the
+  // All orbs sit on the ring (a single orb lands at 3 o'clock), so the
   // avatar in the middle is never covered.
   const angleStep = visible.length <= 1 ? 0 : 360 / visible.length
   return (
@@ -396,17 +404,18 @@ const HoverFocusContext = createContext<{ readonly id: string | null; readonly r
 })
 
 /** Custom node renderer: the worker orb (big ball with requirement orbs).
- * Each requirement orb gets a hidden source/target handle pair at its
- * ring position, so flow edges run from mini node to mini node (the
- * requirement's stage balls), not orb edge to orb edge. */
+ * Every requirement orb gets a hidden source/target handle pair at its
+ * ring position (always mounted: edges reference them, so they must exist
+ * even when the orb itself is hidden), so flow edges run from mini node to
+ * mini node (the requirement's stage balls), not orb edge to orb edge. */
 function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
   const { related } = useContext(HoverFocusContext)
   const owned = data.tasks.filter((task) => task.assignee === data.member.name)
-  const visible = owned.slice(0, TASK_ORB_COUNT)
-  const angleStep = visible.length <= 1 ? 0 : 360 / visible.length
+  const all = owned.slice(0, TASK_ORB_COUNT)
+  const angleStep = all.length <= 1 ? 0 : 360 / all.length
   return (
     <div className={css.nodeWrap}>
-      {visible.map((task, index) => {
+      {all.map((task, index) => {
         const angle = (index * angleStep * Math.PI) / 180
         // Orb center is at the top-left of the node box; ring radius 46px.
         // Matches the CSS ring transform `rotate(θ) translate(46px)`
@@ -460,13 +469,18 @@ interface FlowEdgeData extends Record<string, unknown> {
 
 /** Custom edge renderer: bezier path with arrow marker and a label; reads
  * the hover focus from context so the edges array never changes on hover.
- * The marker defs are declared once in the board (see markerDefs below);
- * this component only switches the url() reference by hover state. */
+ * Edges stay mounted (invisible) by default and appear while their
+ * requirement is focused, so the board stays clean and the flow reads on
+ * hover. The marker defs are declared once in the board (see markerDefs
+ * below); this component only switches the url() reference by hover state. */
 function FlowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<FlowEdgeData>>) {
   const { related } = useContext(HoverFocusContext)
   const taskId = data?.taskId ?? ''
   const depId = data?.depId ?? ''
   const label = data?.label ?? ''
+  // Keep the edge mounted: React Flow does not re-render an edge that
+  // rendered null, so hiding must be done via style, not by returning null.
+  const hidden = related === null
   const hot = related !== null && related.has(taskId) && related.has(depId)
   const dimmed = related !== null && !hot
   const [path, labelX, labelY] = getBezierPath({
@@ -486,17 +500,20 @@ function FlowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
         style={{
           stroke: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
           strokeWidth: hot ? 2.5 : 1.5,
-          opacity: dimmed ? 0.12 : hot ? 1 : 0.7,
+          opacity: hidden ? 0 : dimmed ? 0.12 : hot ? 1 : 0.7,
+          visibility: hidden ? 'hidden' : 'visible',
         }}
       />
       <EdgeLabelRenderer>
         <div
           className={css.edgeLabel}
           data-hot={hot}
-          data-dimmed={dimmed}
+          data-dimmed={hidden ? false : dimmed}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            opacity: hidden ? 0 : 1,
+            pointerEvents: 'none',
           }}
         >
           <span className={css.edgeLabelBg}>{label}</span>
@@ -632,8 +649,18 @@ export function FlowBoard({ team, onNavigate }: {
       const orbRect = orb.getBoundingClientRect()
       const x1 = railRect.right - layoutRect.left
       const y1 = railRect.top + railRect.height / 2 - layoutRect.top
-      const x2 = orbRect.left - layoutRect.left
-      const y2 = orbRect.top + orbRect.height / 2 - layoutRect.top
+      // Target the requirement's mini orb inside the handler node (the
+      // stage ball the worker is executing), falling back to the node's
+      // left rim when the orb is not rendered.
+      const holderTask = requirement.stages.find((stage) => stage.assignee === holder)
+      const orbEl = holderTask !== undefined
+        ? [...orb.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent.trim() === holderTask.id)
+        : undefined
+      const targetRect = orbEl !== undefined ? orbEl.getBoundingClientRect() : undefined
+      const x2 = targetRect !== undefined ? targetRect.left - layoutRect.left : orbRect.left - layoutRect.left
+      const y2 = targetRect !== undefined
+        ? targetRect.top + targetRect.height / 2 - layoutRect.top
+        : orbRect.top + orbRect.height / 2 - layoutRect.top
       // Every other orb is an obstacle: the link may never cross a node.
       const obstacles: Box[] = [...layout.querySelectorAll<HTMLElement>('[data-worker-node]')]
         .filter((el) => el.dataset.workerName !== holder)
