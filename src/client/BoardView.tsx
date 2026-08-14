@@ -11,7 +11,7 @@
  * @module dsh-agent-teams/client/board
  */
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, Handle, MarkerType, Position, ReactFlow, type Edge, type EdgeProps, type Node } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
@@ -395,12 +395,48 @@ const HoverFocusContext = createContext<{ readonly id: string | null; readonly r
   related: null,
 })
 
-/** Custom node renderer: the worker orb (big ball with requirement orbs). */
+/** Custom node renderer: the worker orb (big ball with requirement orbs).
+ * Each requirement orb gets a hidden source/target handle pair at its
+ * ring position, so flow edges run from mini node to mini node (the
+ * requirement's stage balls), not orb edge to orb edge. */
 function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
   const { related } = useContext(HoverFocusContext)
+  const owned = data.tasks.filter((task) => task.assignee === data.member.name)
+  const visible = owned.slice(0, TASK_ORB_COUNT)
+  const angleStep = visible.length <= 1 ? 0 : 360 / visible.length
   return (
     <div className={css.nodeWrap}>
-      <Handle type="target" position={Position.Left} className={css.nodeHandle} />
+      {visible.map((task, index) => {
+        const angle = (index * angleStep * Math.PI) / 180
+        // Orb center is at the top-left of the node box; ring radius 46px.
+        // Matches the CSS ring transform `rotate(θ) translate(46px)`
+        // (angle 0 = 3 o'clock, clockwise, y down).
+        const hx = ORB_DIAMETER / 2 + ORB_RING_RADIUS * Math.cos(angle)
+        const hy = ORB_DIAMETER / 2 + ORB_RING_RADIUS * Math.sin(angle)
+        // Edges run horizontally between columns (dagre LR): offset the
+        // source handle to the orb's right rim and the target handle to the
+        // left rim, so the arrow visibly leaves/enters the mini node.
+        const sourceStyle = { left: hx + ORB_MINI_RADIUS, top: hy, transform: 'translate(-50%, -50%)' }
+        const targetStyle = { left: hx - ORB_MINI_RADIUS, top: hy, transform: 'translate(-50%, -50%)' }
+        return (
+          <Fragment key={task.id}>
+            <Handle
+              id={`src-${task.id}`}
+              type="source"
+              position={Position.Right}
+              className={css.nodeHandle}
+              style={sourceStyle}
+            />
+            <Handle
+              id={`tgt-${task.id}`}
+              type="target"
+              position={Position.Left}
+              className={css.nodeHandle}
+              style={targetStyle}
+            />
+          </Fragment>
+        )
+      })}
       <WorkerNode
         member={data.member}
         tasks={data.tasks}
@@ -409,7 +445,6 @@ function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
         onBlur={data.onBlur}
         onNavigate={data.onNavigate}
       />
-      <Handle type="source" position={Position.Right} className={css.nodeHandle} />
     </div>
   )
 }
@@ -495,6 +530,12 @@ function EdgeMarkerDefs() {
 /** Node box used by the dagre layout (orb + name + meta below). */
 const ORB_NODE_WIDTH = 148
 const ORB_NODE_HEIGHT = 200
+/** Worker orb diameter (matches .workerOrb in BoardView.module.css). */
+const ORB_DIAMETER = 148
+/** Ring radius of the requirement orbs inside a worker orb. */
+const ORB_RING_RADIUS = 46
+/** Radius of one requirement mini orb (matches .taskOrb). */
+const ORB_MINI_RADIUS = 15
 
 /**
  * Left-to-right dagre layout: workers with flow relationships land in
@@ -637,7 +678,11 @@ export function FlowBoard({ team, onNavigate }: {
   const edges = useMemo<Edge[]>(() => buildEdges(team.tasks).map((edge) => ({
     id: edge.id,
     source: edge.from,
+    // Anchor the edge to the actual requirement orbs (mini nodes), so the
+    // arrow runs from the dependency's orb to this task's orb.
+    sourceHandle: `src-${edge.dep.id}`,
     target: edge.to,
+    targetHandle: `tgt-${edge.task.id}`,
     type: 'flow',
     data: {
       taskId: edge.task.id,
