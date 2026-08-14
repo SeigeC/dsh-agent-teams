@@ -107,34 +107,40 @@
 
 .edgeLabel[data-dimmed='true'] {
   opacity: 0.15;
-}
-.workerGrid {
+}.workerGrid {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px 20px;
-  padding-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 26px 40px;
+  align-items: start;
+  justify-items: center;
+  padding: 10px 0 6px;
 }
 
 .workerSlot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 132px;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
 }
 
 .workerOrb {
   position: relative;
   display: flex;
-  width: 112px;
-  height: 112px;
+  width: 148px;
+  height: 148px;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
   border: 2px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
-  background: var(--dsw-alias-bg-layer-1);
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-layer-1) 58%);
+  box-shadow:
+    0 2px 8px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
   transition: opacity 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
@@ -145,18 +151,20 @@
 
 .workerOrb[data-hot='true'] {
   border-color: var(--dsw-alias-state-business-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, transparent),
+    0 6px 18px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
 }
 
 .workerOrb[data-dimmed='true'] {
-  opacity: 0.3;
+  opacity: 0.28;
 }
 
 .orbAvatar {
   position: relative;
   display: inline-flex;
-  width: 44px;
-  height: 44px;
+  width: 56px;
+  height: 56px;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -167,25 +175,28 @@
 }
 
 .orbArt {
-  width: 42px;
-  height: 42px;
+  width: 54px;
+  height: 54px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 2px solid var(--dsw-alias-bg-base);
   border-radius: 50%;
   object-fit: cover;
   background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
 }
 
 .orbInitial {
   display: inline-flex;
-  width: 42px;
-  height: 42px;
+  width: 54px;
+  height: 54px;
   align-items: center;
   justify-content: center;
+  border: 2px solid var(--dsw-alias-bg-base);
   border-radius: 50%;
   color: var(--dsw-alias-label-primary-foreground);
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 600;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
 }
 
 .orbTasks {
@@ -209,28 +220,28 @@
 
 .taskOrb {
   position: absolute;
-  left: -13px;
-  top: -13px;
+  left: -15px;
+  top: -15px;
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   align-items: center;
   justify-content: center;
   padding: 0;
   box-sizing: border-box;
-  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border: 2px solid var(--dsw-alias-label-tertiary);
   border-radius: 50%;
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-secondary);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 26px;
+  line-height: 30px;
   cursor: pointer;
   transition: opacity 120ms ease, border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
 }
 
 .taskOrb:hover {
-  transform: scale(1.15);
+  transform: scale(1.12);
 }
 
 .taskOrb[data-state='running'] {
@@ -270,58 +281,101 @@
 
 .orbOverflow {
   position: absolute;
-  right: -2px;
-  bottom: 2px;
+  right: 2px;
+  bottom: 4px;
   display: inline-flex;
-  min-width: 18px;
-  height: 18px;
+  min-width: 20px;
+  height: 20px;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 5px;
   box-sizing: border-box;
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--dsw-alias-markdown-tag);
   color: var(--dsw-alias-label-tertiary);
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .orbUnread {
   position: absolute;
-  top: -3px;
-  right: 2px;
+  top: 0;
+  right: 4px;
   display: inline-flex;
-  min-width: 18px;
-  height: 18px;
+  min-width: 20px;
+  height: 20px;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 5px;
   box-sizing: border-box;
   border: 2px solid var(--dsw-alias-bg-layer-1);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-primary-foreground);
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .workerName {
   overflow: hidden;
-  max-width: 132px;
+  max-width: 100%;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
-  line-height: 16px;
+  line-height: 18px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.workerMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+}
+
+.workerRole {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workerState {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.workerState[data-activity='working'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.workerStateDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.workerStateDot[data-activity='working'] {
+  background: var(--dsw-alias-state-business-primary);
+  animation: agentTeamsOrbBreathe 2.4s ease-in-out infinite;
+}
+
 @keyframes agentTeamsOrbBreathe {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-state-business-primary) 0%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent); }
 }
 
 .unassignedBar {

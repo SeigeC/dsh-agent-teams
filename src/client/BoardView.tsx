@@ -149,7 +149,7 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
                 key={task.id}
                 className={css.orbTaskSlot}
                 style={visible.length > 1
-                  ? { transform: `rotate(${index * angleStep}deg) translate(38px) rotate(${-index * angleStep}deg)` }
+                  ? { transform: `rotate(${index * angleStep}deg) translate(46px) rotate(${-index * angleStep}deg)` }
                   : undefined}
               >
                 <TaskOrb
@@ -172,6 +172,13 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
         {member.unread > 0 && <span className={css.orbUnread}>{member.unread}</span>}
       </div>
       <div className={css.workerName} title={member.name}>{member.name}</div>
+      <div className={css.workerMeta}>
+        <span className={css.workerRole}>{member.role}</span>
+        <span className={css.workerState} data-activity={member.activity}>
+          <span className={css.workerStateDot} data-activity={member.activity} aria-hidden />
+          {memberStateLabel(member, tasks)}
+        </span>
+      </div>
     </div>
   )
 }
