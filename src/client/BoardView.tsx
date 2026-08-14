@@ -199,8 +199,8 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
   const involved = focusedRelated === null || owned.some((task) => focusedRelated.has(task.id))
   const visible = owned.slice(0, TASK_ORB_COUNT)
   const overflow = owned.length - visible.length
-  // All orbs sit on the ring (a single orb lands at 3 o'clock), so the
-  // avatar in the middle is never covered.
+  // All orbs sit on the ring starting at 12 o'clock, so the avatar in the
+  // middle is never covered and edges run through the free space above.
   const angleStep = visible.length <= 1 ? 0 : 360 / visible.length
   return (
     <div className={css.workerSlot}>
@@ -230,7 +230,7 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
               <span
                 key={task.id}
                 className={css.orbTaskSlot}
-                style={{ transform: `rotate(${index * angleStep}deg) translate(46px) rotate(${-index * angleStep}deg)` }}
+                style={{ transform: `rotate(${ORB_START_ANGLE_DEG + index * angleStep}deg) translate(89px) rotate(${-(ORB_START_ANGLE_DEG + index * angleStep)}deg)` }}
               >
                 <TaskOrb
                   task={task}
@@ -411,10 +411,10 @@ function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
   return (
     <div className={css.nodeWrap}>
       {all.map((task, index) => {
-        const angle = (index * angleStep * Math.PI) / 180
-        // Orb center is at the top-left of the node box; ring radius 46px.
-        // Matches the CSS ring transform `rotate(θ) translate(46px)`
-        // (angle 0 = 3 o'clock, clockwise, y down).
+        const angle = ((ORB_START_ANGLE_DEG + index * angleStep) * Math.PI) / 180
+        // Orb center is at the top-left of the node box; ring radius 89px.
+        // Matches the CSS ring transform `rotate(θ) translate(89px)`
+        // (angle 0 = 3 o'clock, clockwise, y down; start -90° = 12 o'clock).
         const hx = ORB_DIAMETER / 2 + ORB_RING_RADIUS * Math.cos(angle)
         const hy = ORB_DIAMETER / 2 + ORB_RING_RADIUS * Math.sin(angle)
         // Edges run horizontally between columns (dagre LR): offset the
@@ -540,10 +540,16 @@ const ORB_NODE_WIDTH = 148
 const ORB_NODE_HEIGHT = 200
 /** Worker orb diameter (matches .workerOrb in BoardView.module.css). */
 const ORB_DIAMETER = 148
-/** Ring radius of the requirement orbs inside a worker orb. */
-const ORB_RING_RADIUS = 46
+/** Distance of a requirement mini-orb center from the worker orb center.
+ * The orbs sit just outside the rim (rim 74 + mini radius 15 = 89), so
+ * they are fully visible and flow edges connect mini node to mini node in
+ * the gap above the worker row, never crossing a big orb. */
+const ORB_RING_RADIUS = 89
 /** Radius of one requirement mini orb (matches .taskOrb). */
 const ORB_MINI_RADIUS = 15
+/** Ring angle of the first requirement orb: 12 o'clock (-90°), above the
+ * worker orb, so edges run through the free space over the row. */
+const ORB_START_ANGLE_DEG = -90
 
 /**
  * Left-to-right dagre layout: workers with flow relationships land in
