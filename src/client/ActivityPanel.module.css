@@ -242,12 +242,23 @@
   grid-template-columns: 38px minmax(0, 1fr) auto;
   gap: 9px;
   align-items: center;
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   padding: 8px 10px;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 32%, var(--dsw-alias-line-normal));
   border-radius: 10px;
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-module));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.captainNode:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, var(--dsw-alias-bg-module));
 }
 
 .captainAvatar,

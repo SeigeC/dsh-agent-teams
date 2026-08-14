@@ -327,7 +327,12 @@ function TeamSection({ team, onNavigate, historic = false }: {
       </header>
 
       <section className={css.delegationSection} aria-label="队长派工关系" data-delegation-map>
-        <div className={css.captainNode}>
+        <button
+          type="button"
+          className={css.captainNode}
+          onClick={() => { onNavigate(team.captainSessionId as SessionId) }}
+          title="回到队长会话"
+        >
           <span className={css.captainAvatar}>
             <img className={css.leadAvatar} src={LEAD_ART} alt="" aria-hidden />
           </span>
@@ -342,7 +347,7 @@ function TeamSection({ team, onNavigate, historic = false }: {
             <StateDot state={busyCount > 0 ? 'ongoing' : allCompleted ? 'done' : 'warning'} />
             {busyCount > 0 ? `${busyCount} 人执行中` : allCompleted ? '已收齐' : '等待回报'}
           </span>
-        </div>
+        </button>
 
         <div className={css.delegationTree}>
           {team.members.length === 0 && <span className={css.emptyHint}>暂无成员，等待队长组建团队</span>}
