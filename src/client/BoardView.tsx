@@ -187,57 +187,113 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
 
 /**
 /** Requirement rail groups in display order (everything the team carries). */
-const RAIL_GROUPS: readonly { readonly key: string; readonly label: string; readonly match: (task: ActivityTask) => boolean }[] = [
-  { key: 'pending', label: '未开始', match: (task) => task.status === 'pending' || task.status === 'claimed' },
-  { key: 'running', label: '进行中', match: (task) => task.status === 'in_progress' },
-  { key: 'done', label: '已完成', match: (task) => task.status === 'completed' },
-  { key: 'failed', label: '异常', match: (task) => task.status === 'failed' || task.status === 'cancelled' },
-]
+/** One requirement: an independent unit flowing through worker stages. */
+interface Requirement {
+  readonly id: string
+  readonly root: ActivityTask
+  readonly stages: readonly ActivityTask[]
+}
 
-/**
- * The left requirement rail: every requirement grouped by status. Hovering
- * one highlights its whole flow path across the worker orbs.
- */
-function RequirementRail({ team, focusedTaskId, related, onFocus, onBlur }: {
-  readonly team: ActivityTeam
-  readonly focusedTaskId: string | null
+/** Build requirements from tasks: a requirement is a root task (no
+ * dependencies) plus every task that transitively depends on it. Each task
+ * belongs to the requirement of its root, so requirements never overlap. */
+function buildRequirements(tasks: readonly ActivityTask[]): Requirement[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]))
+  const rootOf = new Map<string, string>()
+  const findRoot = (task: ActivityTask): string => {
+    const cached = rootOf.get(task.id)
+    if (cached !== undefined) return cached
+    const first = task.dependencies[0]
+    const dep = first !== undefined ? byId.get(first) : undefined
+    const root = dep !== undefined ? findRoot(dep) : task.id
+    rootOf.set(task.id, root)
+    return root
+  }
+  const byRoot = new Map<string, ActivityTask[]>()
+  for (const task of tasks) {
+    const root = findRoot(task)
+    const list = byRoot.get(root) ?? []
+    list.push(task)
+    byRoot.set(root, list)
+  }
+  return [...byRoot.entries()].map(([rootId, stages]) => {
+    const root = byId.get(rootId) ?? stages[0]!
+    return {
+      id: rootId,
+      root,
+      stages: stages.slice().sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true })),
+    }
+  })
+}
+
+/** Overall status of one requirement, derived from its stages. */
+function requirementStatus(requirement: Requirement): 'pending' | 'running' | 'done' | 'failed' {
+  if (requirement.stages.some((stage) => stage.status === 'failed' || stage.status === 'cancelled')) return 'failed'
+  if (requirement.stages.some((stage) => stage.status === 'in_progress')) return 'running'
+  if (requirement.stages.every((stage) => stage.status === 'completed')) return 'done'
+  return 'pending'
+}
+
+/** The worker holding the requirement right now (working stage, else the
+ * first non-completed stage, else the root's assignee). */
+function currentHolderOf(requirement: Requirement): string {
+  const working = requirement.stages.find((stage) => stage.status === 'in_progress')
+  if (working !== undefined) return working.assignee !== '' ? working.assignee : '待认领'
+  const next = requirement.stages.find((stage) => stage.status !== 'completed')
+  if (next !== undefined) return next.assignee !== '' ? next.assignee : '待认领'
+  return '已收齐'
+}
+
+/** The left requirement rail: independent requirements grouped by their
+ * overall status. Hovering one highlights its whole flow path. */
+function RequirementRail({ requirements, focusedRequirementId, related, onFocus, onBlur }: {
+  readonly requirements: readonly Requirement[]
+  readonly focusedRequirementId: string | null
   readonly related: ReadonlySet<string> | null
-  readonly onFocus: (taskId: string) => void
+  readonly onFocus: (requirementId: string) => void
   readonly onBlur: () => void
 }) {
+  const groups: readonly { readonly key: string; readonly label: string; readonly match: (requirement: Requirement) => boolean }[] = [
+    { key: 'pending', label: '未开始', match: (r) => requirementStatus(r) === 'pending' },
+    { key: 'running', label: '进行中', match: (r) => requirementStatus(r) === 'running' },
+    { key: 'done', label: '已完成', match: (r) => requirementStatus(r) === 'done' },
+    { key: 'failed', label: '异常', match: (r) => requirementStatus(r) === 'failed' },
+  ]
   return (
     <aside className={css.requirementRail} aria-label="需求列表">
-      {RAIL_GROUPS.map((group) => {
-        const tasks = team.tasks.filter(group.match)
-        if (tasks.length === 0) return null
+      {groups.map((group) => {
+        const items = requirements.filter(group.match)
+        if (items.length === 0) return null
         return (
           <div key={group.key} className={css.railGroup}>
             <header className={css.railGroupHead}>
               <span>{group.label}</span>
-              <span className={css.railCount}>{tasks.length}</span>
+              <span className={css.railCount}>{items.length}</span>
             </header>
-            {tasks.map((task) => {
-              const tone = taskTone(task.state, task.status)
-              const hot = focusedTaskId !== null && related?.has(task.id) === true
-              const dimmed = focusedTaskId !== null && !hot
+            {items.map((requirement) => {
+              const hot = focusedRequirementId !== null && focusedRequirementId === requirement.id
+              const dimmed = focusedRequirementId !== null && !hot
+              const holder = currentHolderOf(requirement)
               return (
                 <button
                   type="button"
-                  key={task.id}
+                  key={requirement.id}
                   className={css.railItem}
-                  data-state={tone}
+                  data-state={requirementStatus(requirement)}
                   data-hot={hot}
                   data-dimmed={dimmed}
-                  data-rail-task={task.id}
-                  title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, team.tasks)}` : ''}`}
-                  onMouseEnter={() => { onFocus(task.id) }}
+                  data-rail-task={requirement.id}
+                  title={`${requirement.id} ${requirement.root.subject} · ${requirement.stages.length} 个环节`}
+                  onMouseEnter={() => { onFocus(requirement.id) }}
                   onMouseLeave={onBlur}
-                  onFocus={() => { onFocus(task.id) }}
+                  onFocus={() => { onFocus(requirement.id) }}
                   onBlur={onBlur}
                 >
-                  <span className={css.railItemId}>{task.id}</span>
-                  <span className={css.railItemSubject}>{task.subject}</span>
-                  <span className={css.railItemOwner}>{task.assignee !== '' ? `→ ${task.assignee}` : '待认领'}</span>
+                  <span className={css.railItemId}>{requirement.id}</span>
+                  <span className={css.railItemSubject}>{requirement.root.subject}</span>
+                  <span className={css.railItemOwner}>
+                    {requirement.stages.length > 1 ? `${requirement.stages.length} 环节 · ` : ''}{holder}
+                  </span>
                 </button>
               )
             })}
@@ -249,6 +305,8 @@ function RequirementRail({ team, focusedTaskId, related, onFocus, onBlur }: {
 }
 
 
+
+
 /**
  * Board content for one team: one node per worker, requirement edges drawn
  * between workers (a requirement flows from its dependency's worker to its
@@ -258,16 +316,28 @@ export function FlowBoard({ team, onNavigate }: {
   readonly team: ActivityTeam
   readonly onNavigate: (id: SessionId) => void
 }) {
-  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
+  const [focusedRequirementId, setFocusedRequirementId] = useState<string | null>(null)
+  const requirements = useMemo(() => buildRequirements(team.tasks), [team.tasks])
+  const requirementByTask = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const requirement of requirements) {
+      for (const stage of requirement.stages) map.set(stage.id, requirement.id)
+    }
+    return map
+  }, [requirements])
+  const focusRequirementOf = (taskId: string): void => {
+    setFocusedRequirementId(requirementByTask.get(taskId) ?? null)
+  }
   const containerRef = useRef<HTMLDivElement>(null)
   const [nodeRects, setNodeRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
   const [railRects, setRailRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const edges = useMemo(() => buildEdges(team.tasks), [team.tasks])
-  const related = useMemo(
-    () => (focusedTaskId === null ? null : relatedTaskIds(focusedTaskId, team.tasks)),
-    [focusedTaskId, team.tasks],
-  )
+  const related = useMemo(() => {
+    if (focusedRequirementId === null) return null
+    const requirement = requirements.find((candidate) => candidate.id === focusedRequirementId)
+    return requirement === undefined ? null : new Set(requirement.stages.map((stage) => stage.id))
+  }, [focusedRequirementId, requirements])
   const involvedWorkers = useMemo(() => {
     if (related === null) return null
     const names = new Set<string>()
@@ -332,11 +402,11 @@ export function FlowBoard({ team, onNavigate }: {
 
       <div className={css.boardLayout} ref={containerRef}>
         <RequirementRail
-          team={team}
-          focusedTaskId={focusedTaskId}
+          requirements={requirements}
+          focusedRequirementId={focusedRequirementId}
           related={related}
-          onFocus={setFocusedTaskId}
-          onBlur={() => { setFocusedTaskId(null) }}
+          onFocus={setFocusedRequirementId}
+          onBlur={() => { setFocusedRequirementId(null) }}
         />
 
       <div className={css.flowArea}>
@@ -348,8 +418,8 @@ export function FlowBoard({ team, onNavigate }: {
               member={member}
               tasks={team.tasks}
               focusedRelated={related}
-              onFocus={setFocusedTaskId}
-              onBlur={() => { setFocusedTaskId(null) }}
+              onFocus={focusRequirementOf}
+              onBlur={() => { setFocusedRequirementId(null) }}
               onNavigate={onNavigate}
             />
           ))}
@@ -400,10 +470,10 @@ export function FlowBoard({ team, onNavigate }: {
                   data-dimmed={dimmed}
                   data-hot={hot}
                   transform={`translate(${(x1 + x2) / 2} ${midY})`}
-                  onMouseEnter={() => { setFocusedTaskId(edge.task.id) }}
-                  onMouseLeave={() => { setFocusedTaskId(null) }}
-                  onFocus={() => { setFocusedTaskId(edge.task.id) }}
-                  onBlur={() => { setFocusedTaskId(null) }}
+                  onMouseEnter={() => { focusRequirementOf(edge.task.id) }}
+                  onMouseLeave={() => { setFocusedRequirementId(null) }}
+                  onFocus={() => { focusRequirementOf(edge.task.id) }}
+                  onBlur={() => { setFocusedRequirementId(null) }}
                   role="button"
                   tabIndex={0}
                   aria-label={`需求 ${edge.task.id} 从 ${edge.from} 流转到 ${edge.to}`}
@@ -415,10 +485,11 @@ export function FlowBoard({ team, onNavigate }: {
               </g>
             )
           })}
-          {team.tasks.map((task) => {
-            if (task.assignee === '') return null
-            const rail = railRects.get(task.id)
-            const orb = nodeRects.get(task.assignee)
+          {requirements.map((requirement) => {
+            const holder = currentHolderOf(requirement)
+            if (holder === '待认领' || holder === '已收齐') return null
+            const rail = railRects.get(requirement.id)
+            const orb = nodeRects.get(holder)
             if (rail === undefined || orb === undefined || containerRect === null) return null
             const x1 = rail.right - containerRect.left
             const y1 = rail.top + rail.height / 2 - containerRect.top
@@ -432,11 +503,11 @@ export function FlowBoard({ team, onNavigate }: {
             const y2 = cy + (dy / length) * radius
             const bend = Math.max(16, Math.abs(x1 - x2) * 0.4)
             const path = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
-            const hot = related !== null && related.has(task.id)
+            const hot = related !== null && related.has(requirement.root.id)
             const dimmed = related !== null && !hot
             return (
               <path
-                key={`handler:${task.id}`}
+                key={`handler:${requirement.id}`}
                 className={css.handlerLink}
                 data-hot={hot}
                 data-dimmed={dimmed}
