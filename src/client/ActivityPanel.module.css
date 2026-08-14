@@ -239,7 +239,7 @@
 
 .captainNode {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
   gap: 9px;
   align-items: center;
   width: 100%;
@@ -259,6 +259,19 @@
 
 .captainNode:hover {
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, var(--dsw-alias-bg-module));
+}
+
+.captainChevron {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--dsw-alias-label-tertiary);
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.captainNode:hover .captainChevron {
+  color: var(--dsw-alias-state-business-primary);
+  transform: translateX(1px);
 }
 
 .captainAvatar,
@@ -939,7 +952,7 @@
   }
 
   .captainNode {
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: 38px minmax(0, 1fr) auto;
   }
 
   .captainState {

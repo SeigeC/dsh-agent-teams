@@ -347,6 +347,9 @@ function TeamSection({ team, onNavigate, historic = false }: {
             <StateDot state={busyCount > 0 ? 'ongoing' : allCompleted ? 'done' : 'warning'} />
             {busyCount > 0 ? `${busyCount} 人执行中` : allCompleted ? '已收齐' : '等待回报'}
           </span>
+          <span className={css.captainChevron} aria-hidden>
+            <IconChevronRightOutline14 />
+          </span>
         </button>
 
         <div className={css.delegationTree}>
