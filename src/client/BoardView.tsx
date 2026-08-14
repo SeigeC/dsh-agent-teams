@@ -11,8 +11,10 @@
  * @module dsh-agent-teams/client/board
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { Handle, MarkerType, Position, ReactFlow, type Edge, type Node } from '@xyflow/react'
+import dagre from '@dagrejs/dagre'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ObservableSnapshot, SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -23,6 +25,7 @@ import {
 } from './activity-ui.ts'
 import { relatedTaskIds } from './activity-model.ts'
 import { memberArtUrl } from './artwork.ts'
+import reactFlowCss from '\0dsh-react-flow-css'
 import css from './BoardView.module.css'
 
 /** Poll cadence for the host snapshot route. */
@@ -377,10 +380,73 @@ function RequirementRail({ requirements, focusedRequirementId, related, onFocus,
 
 
 
+/** React Flow node payload for a worker orb. */
+interface WorkerOrbData {
+  readonly member: ActivityMember
+  readonly tasks: readonly ActivityTask[]
+  readonly focusedRelated: ReadonlySet<string> | null
+  readonly onFocus: (taskId: string) => void
+  readonly onBlur: () => void
+  readonly onNavigate: (id: SessionId) => void
+}
+
+/** Custom node renderer: the worker orb (big ball with requirement orbs). */
+function WorkerOrbNode({ data }: { readonly data: WorkerOrbData }) {
+  return (
+    <div className={css.nodeWrap}>
+      <Handle type="target" position={Position.Left} className={css.nodeHandle} />
+      <WorkerNode
+        member={data.member}
+        tasks={data.tasks}
+        focusedRelated={data.focusedRelated}
+        onFocus={data.onFocus}
+        onBlur={data.onBlur}
+        onNavigate={data.onNavigate}
+      />
+      <Handle type="source" position={Position.Right} className={css.nodeHandle} />
+    </div>
+  )
+}
+
+/** Stable node type registry (React Flow requires a constant reference). */
+const workerOrbNodeTypes = { workerOrb: WorkerOrbNode }
+
+/** Node box used by the dagre layout (orb + name + meta below). */
+const ORB_NODE_WIDTH = 148
+const ORB_NODE_HEIGHT = 200
+
 /**
- * Board content for one team: one node per worker, requirement edges drawn
- * between workers (a requirement flows from its dependency's worker to its
- * own worker), and hovering a requirement highlights its whole flow path.
+ * Left-to-right dagre layout: workers with flow relationships land in
+ * adjacent columns, so requirement edges run between columns and never
+ * cross another worker orb.
+ */
+function layoutWorkerOrbs(team: ActivityTeam): Map<string, { x: number; y: number }> {
+  const graph = new dagre.graphlib.Graph()
+  graph.setGraph({ rankdir: 'LR', nodesep: 36, ranksep: 150, marginx: 0, marginy: 0 })
+  graph.setDefaultEdgeLabel(() => ({}))
+  for (const member of team.members) {
+    graph.setNode(member.name, { width: ORB_NODE_WIDTH, height: ORB_NODE_HEIGHT })
+  }
+  for (const edge of buildEdges(team.tasks)) {
+    if (!graph.hasEdge(edge.from, edge.to)) graph.setEdge(edge.from, edge.to)
+  }
+  dagre.layout(graph)
+  const positions = new Map<string, { x: number; y: number }>()
+  for (const member of team.members) {
+    const node = graph.node(member.name)
+    positions.set(member.name, {
+      x: node.x - ORB_NODE_WIDTH / 2,
+      y: node.y - ORB_NODE_HEIGHT / 2,
+    })
+  }
+  return positions
+}
+
+/**
+ * Board content for one team: worker orbs laid out by dagre and rendered
+ * with React Flow; requirement edges run between adjacent columns with
+ * arrow markers; hovering a requirement (rail item or nested orb)
+ * highlights its whole flow path.
  */
 export function FlowBoard({ team, onNavigate }: {
   readonly team: ActivityTeam
@@ -398,65 +464,55 @@ export function FlowBoard({ team, onNavigate }: {
   const focusRequirementOf = (taskId: string): void => {
     setFocusedRequirementId(requirementByTask.get(taskId) ?? null)
   }
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [nodeRects, setNodeRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
-  const [railRects, setRailRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
-  const edges = useMemo(() => buildEdges(team.tasks), [team.tasks])
+  const blur = useCallback(() => { setFocusedRequirementId(null) }, [])
   const related = useMemo(() => {
     if (focusedRequirementId === null) return null
     const requirement = requirements.find((candidate) => candidate.id === focusedRequirementId)
     return requirement === undefined ? null : new Set(requirement.stages.map((stage) => stage.id))
   }, [focusedRequirementId, requirements])
-  const involvedWorkers = useMemo(() => {
-    if (related === null) return null
-    const names = new Set<string>()
-    for (const task of team.tasks) {
-      if (related.has(task.id) && task.assignee !== '') names.add(task.assignee)
-    }
-    return names
-  }, [related, team.tasks])
   const completedCount = team.tasks.filter((task) => task.status === 'completed').length
+  const positions = useMemo(() => layoutWorkerOrbs(team), [team])
 
-  // Measure worker nodes and the container so edges can be drawn between
-  // nodes in the SVG layer (re-measured on layout changes).
-  useLayoutEffect(() => {
-    const update = (): void => {
-      const container = containerRef.current
-      if (container === null) return
-      const map = new Map<string, DOMRect>()
-      for (const el of container.querySelectorAll<HTMLElement>('[data-worker-node]')) {
-        const name = el.dataset.workerName
-        if (name !== undefined) map.set(name, el.getBoundingClientRect())
-      }
-      const railMap = new Map<string, DOMRect>()
-      for (const el of container.querySelectorAll<HTMLElement>('[data-rail-task]')) {
-        const taskId = el.dataset.railTask
-        if (taskId !== undefined) railMap.set(taskId, el.getBoundingClientRect())
-      }
-      setNodeRects(map)
-      setRailRects(railMap)
-      setContainerSize({ width: container.clientWidth, height: container.clientHeight })
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    const container = containerRef.current
-    if (container !== null) observer.observe(container)
-    window.addEventListener('resize', update)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [])
+  const nodes = useMemo<Node[]>(() => team.members.map((member) => ({
+    id: member.name,
+    type: 'workerOrb',
+    position: positions.get(member.name) ?? { x: 0, y: 0 },
+    data: {
+      member,
+      tasks: team.tasks,
+      focusedRelated: related,
+      onFocus: focusRequirementOf,
+      onBlur: blur,
+      onNavigate,
+    } satisfies WorkerOrbData,
+  })), [team.members, team.tasks, positions, related, blur, onNavigate])
 
-  // Parallel edges between the same worker pair fan out vertically.
-  const pairTotal = new Map<string, number>()
-  for (const edge of edges) {
-    const key = `${edge.from}>${edge.to}`
-    pairTotal.set(key, (pairTotal.get(key) ?? 0) + 1)
-  }
-  const pairIndex = new Map<string, number>()
-  const containerRect = containerRef.current?.getBoundingClientRect() ?? null
+  const edges = useMemo<Edge[]>(() => buildEdges(team.tasks).map((edge) => {
+    const hot = related !== null && related.has(edge.task.id) && related.has(edge.dep.id)
+    const dimmed = related !== null && !hot
+    return {
+      id: edge.id,
+      source: edge.from,
+      target: edge.to,
+      type: 'default',
+      label: edge.task.id,
+      labelStyle: { fill: 'var(--dsw-alias-label-secondary)', fontWeight: 600, fontSize: 10 },
+      labelBgStyle: { fill: 'var(--dsw-alias-bg-base)', stroke: 'var(--dsw-alias-border-l2)', strokeWidth: 1 },
+      labelBgPadding: [4, 3],
+      labelBgBorderRadius: 8,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
+      },
+      style: {
+        stroke: hot ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
+        strokeWidth: hot ? 2.5 : 1.5,
+        opacity: dimmed ? 0.12 : hot ? 1 : 0.7,
+      },
+    }
+  }), [team.tasks, related])
 
   return (
     <section className={css.board} data-board data-team-id={team.teamId}>
@@ -469,151 +525,41 @@ export function FlowBoard({ team, onNavigate }: {
         </span>
       </header>
 
-
-      <div className={css.boardLayout} ref={containerRef}>
+      <div className={css.boardLayout}>
         <RequirementRail
           requirements={requirements}
           focusedRequirementId={focusedRequirementId}
           related={related}
           onFocus={setFocusedRequirementId}
-          onBlur={() => { setFocusedRequirementId(null) }}
+          onBlur={blur}
         />
 
-      <div className={css.flowArea}>
-
-        <div className={css.workerGrid}>
-          {team.members.map((member) => (
-            <WorkerNode
-              key={member.id}
-              member={member}
-              tasks={team.tasks}
-              focusedRelated={related}
-              onFocus={focusRequirementOf}
-              onBlur={() => { setFocusedRequirementId(null) }}
-              onNavigate={onNavigate}
-            />
-          ))}
+        <div className={css.flowArea}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={workerOrbNodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            panOnDrag={false}
+            zoomOnScroll={false}
+            zoomOnPinch={false}
+            zoomOnDoubleClick={false}
+            fitView
+            fitViewOptions={{ padding: 0.12 }}
+            minZoom={0.5}
+            maxZoom={2}
+            proOptions={{ hideAttribution: false }}
+            className={css.flowCanvas}
+          />
         </div>
-      </div>
-        <svg
-          className={css.flowSvg}
-          width={containerSize.width}
-          height={containerSize.height}
-          aria-hidden
-        >
-          <defs>
-            <marker
-              id={`at-flow-arrow-${team.teamId}`}
-              viewBox="0 0 10 10"
-              refX="8"
-              refY="5"
-              markerWidth="8"
-              markerHeight="8"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" className={css.edgeArrow} />
-            </marker>
-          </defs>
-          {edges.map((edge) => {
-            const from = nodeRects.get(edge.from)
-            const to = nodeRects.get(edge.to)
-            if (from === undefined || to === undefined || containerRect === null) return null
-            const x1 = from.left + from.width / 2 - containerRect.left
-            const y1 = from.top + from.height / 2 - containerRect.top
-            const cx = to.left + to.width / 2 - containerRect.left
-            const cy = to.top + to.height / 2 - containerRect.top
-            const dirX = x1 - cx
-            const dirY = y1 - cy
-            const dirLen = Math.hypot(dirX, dirY) || 1
-            const radius = to.width / 2 + 2
-            const x2 = cx + (dirX / dirLen) * radius
-            const y2 = cy + (dirY / dirLen) * radius
-            const pairKey = `${edge.from}>${edge.to}`
-            const index = pairIndex.get(pairKey) ?? 0
-            pairIndex.set(pairKey, index + 1)
-            const offset = (index - ((pairTotal.get(pairKey) ?? 1) - 1) / 2) * 16
-            const bend = 36
-            const midY = (y1 + y2) / 2 + offset
-            const obstacles = [...nodeRects.entries()]
-              .filter(([name]) => name !== edge.from && name !== edge.to)
-              .map(([, rect]) => ({
-                left: rect.left - containerRect.left,
-                top: rect.top - containerRect.top,
-                right: rect.left + rect.width - containerRect.left,
-                bottom: rect.top + rect.height - containerRect.top,
-              }))
-            const path = routeConnection(x1, y1, x2, y2, obstacles, bend)
-            const hot = related !== null && related.has(edge.task.id) && related.has(edge.dep.id)
-            const dimmed = related !== null && !hot
-            const labelWidth = Math.max(36, edge.task.id.length * 8 + 16)
-            return (
-              <g key={edge.id}>
-                <path className={css.edgePath} data-dimmed={dimmed} data-hot={hot} d={path} markerEnd={`url(#at-flow-arrow-${team.teamId})`} />
-                <g
-                  className={css.edgeLabel}
-                  data-dimmed={dimmed}
-                  data-hot={hot}
-                  transform={`translate(${(x1 + x2) / 2} ${midY})`}
-                  onMouseEnter={() => { focusRequirementOf(edge.task.id) }}
-                  onMouseLeave={() => { setFocusedRequirementId(null) }}
-                  onFocus={() => { focusRequirementOf(edge.task.id) }}
-                  onBlur={() => { setFocusedRequirementId(null) }}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`需求 ${edge.task.id} 从 ${edge.from} 流转到 ${edge.to}`}
-                >
-                  <rect className={css.edgeLabelBg} width={labelWidth} height={20} rx={10} />
-                  <text className={css.edgeLabelText} x={labelWidth / 2} y={14} textAnchor="middle">{edge.task.id}</text>
-                  <title>{`${edge.task.id} ${edge.task.subject}：${edge.from} → ${edge.to}`}</title>
-                </g>
-              </g>
-            )
-          })}
-          {requirements.map((requirement) => {
-            const holder = currentHolderOf(requirement)
-            if (holder === '待认领' || holder === '已收齐') return null
-            const rail = railRects.get(requirement.id)
-            const orb = nodeRects.get(holder)
-            if (rail === undefined || orb === undefined || containerRect === null) return null
-            const x1 = rail.right - containerRect.left
-            const y1 = rail.top + rail.height / 2 - containerRect.top
-            const cx = orb.left + orb.width / 2 - containerRect.left
-            const cy = orb.top + orb.height / 2 - containerRect.top
-            const dx = x1 - cx
-            const dy = y1 - cy
-            const length = Math.hypot(dx, dy) || 1
-            const radius = orb.width / 2 + 2
-            const x2 = cx + (dx / length) * radius
-            const y2 = cy + (dy / length) * radius
-            const bend = Math.max(16, Math.abs(x1 - x2) * 0.4)
-            const obstacles = [...nodeRects.entries()]
-              .filter(([name]) => name !== holder)
-              .map(([, rect]) => ({
-                left: rect.left - containerRect.left,
-                top: rect.top - containerRect.top,
-                right: rect.left + rect.width - containerRect.left,
-                bottom: rect.top + rect.height - containerRect.top,
-              }))
-            const path = routeConnection(x1, y1, x2, y2, obstacles, bend)
-            const hot = related !== null && related.has(requirement.root.id)
-            const dimmed = related !== null && !hot
-            return (
-              <path
-                key={`handler:${requirement.id}`}
-                className={css.handlerLink} markerEnd={`url(#at-flow-arrow-${team.teamId})`}
-                data-hot={hot}
-                data-dimmed={dimmed}
-                d={path}
-              />
-            )
-          })}
-
-        </svg>
-
       </div>
     </section>
   )
 }
+
+
 
 
 export function findConversationTabBar(): HTMLElement | null {
@@ -666,6 +612,15 @@ function shellTabsOf(tabBar: HTMLElement): HTMLElement[] {
     .filter((tab) => !tab.classList.contains(BOARD_TAB_CLASS))
 }
 
+/**
+ * The main-interface task board: injects the 任务看板 tab and, while the
+ * tab is active, replaces the conversation content panel with the board
+ * (the shell exposes no tab extension point, so the tab is injected by
+ * relative DOM location and kept alive across shell re-renders by a
+ * MutationObserver). The board follows the current session (captain or
+ * member), polls the host snapshot route, and closes on session switch or
+ * when another conversation tab is picked.
+ */
 /**
  * The main-interface task board: injects the 任务看板 tab and, while the
  * tab is active, replaces the conversation content panel with the board
@@ -787,7 +742,7 @@ export function BoardOverlay({ sessionsList, openSession }: {
       const style = document.createElement('style')
       style.id = BOARD_GLOBAL_STYLE_ID
       style.dataset.plugin = 'dsh-agent-teams'
-      style.textContent = BOARD_GLOBAL_CSS
+      style.textContent = BOARD_GLOBAL_CSS + "\n" + reactFlowCss
       document.head.appendChild(style)
     }
     const ensureTab = (): void => {

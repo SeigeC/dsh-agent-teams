@@ -46,6 +46,8 @@ const GENERATED_REMOTE = /^@deepseek-ai\/dsh-[a-z0-9]+(?:-[a-z0-9]+)*\/remote$/
 /** Virtual-id wrapper keeping module CSS away from tsdown's own css pipeline. */
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
+/** Virtual id embedding the React Flow stylesheet into the client bundle. */
+const REACT_FLOW_CSS_ID = '\0dsh-react-flow-css'
 
 const PLUGIN_ID = 'dsh-agent-teams'
 
@@ -90,6 +92,17 @@ const config: UserConfig = {
         `client bundle purity: "${source}" is not a platform module (CLIENT_EXTERNALS), an inline-safe wire layer, or a generated /remote contribution — `
         + 'cross-plugin value imports are forbidden; collaborate through cordis services (type-only imports are erased and never reach this gate)',
       )
+    },
+  }, {
+    name: 'dsh-react-flow-css',
+    resolveId(source: string) {
+      return source === REACT_FLOW_CSS_ID ? source : null
+    },
+    load(id: string) {
+      if (id !== REACT_FLOW_CSS_ID) return null
+      const cssPath = resolvePath(process.cwd(), 'node_modules/@xyflow/react/dist/style.css')
+      const css = readFileSync(cssPath, 'utf8')
+      return `const css = ${JSON.stringify(css)};\nexport default css;`
     },
   }, {
     name: 'dsh-css-modules-inline',

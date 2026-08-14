@@ -16,15 +16,25 @@ import { type ActivityTeam } from './activity-ui.ts';
 /** Class marker for the injected conversation tab. */
 export declare const BOARD_TAB_CLASS = "dsh-agent-teams-board-tab";
 /**
- * Board content for one team: one node per worker, requirement edges drawn
- * between workers (a requirement flows from its dependency's worker to its
- * own worker), and hovering a requirement highlights its whole flow path.
+ * Board content for one team: worker orbs laid out by dagre and rendered
+ * with React Flow; requirement edges run between adjacent columns with
+ * arrow markers; hovering a requirement (rail item or nested orb)
+ * highlights its whole flow path.
  */
 export declare function FlowBoard({ team, onNavigate }: {
     readonly team: ActivityTeam;
     readonly onNavigate: (id: SessionId) => void;
 }): import("react").JSX.Element;
 export declare function findConversationTabBar(): HTMLElement | null;
+/**
+ * The main-interface task board: injects the 任务看板 tab and, while the
+ * tab is active, replaces the conversation content panel with the board
+ * (the shell exposes no tab extension point, so the tab is injected by
+ * relative DOM location and kept alive across shell re-renders by a
+ * MutationObserver). The board follows the current session (captain or
+ * member), polls the host snapshot route, and closes on session switch or
+ * when another conversation tab is picked.
+ */
 /**
  * The main-interface task board: injects the 任务看板 tab and, while the
  * tab is active, replaces the conversation content panel with the board
