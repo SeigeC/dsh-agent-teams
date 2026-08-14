@@ -196,6 +196,8 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
   const involved = focusedRelated === null || owned.some((task) => focusedRelated.has(task.id))
   const visible = owned.slice(0, TASK_ORB_COUNT)
   const overflow = owned.length - visible.length
+  // All orbs sit on the ring (a single orb lands at 12 o'clock), so the
+  // avatar in the middle is never covered.
   const angleStep = visible.length <= 1 ? 0 : 360 / visible.length
   return (
     <div className={css.workerSlot}>
@@ -225,9 +227,7 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
               <span
                 key={task.id}
                 className={css.orbTaskSlot}
-                style={visible.length > 1
-                  ? { transform: `rotate(${index * angleStep}deg) translate(46px) rotate(${-index * angleStep}deg)` }
-                  : undefined}
+                style={{ transform: `rotate(${index * angleStep}deg) translate(46px) rotate(${-index * angleStep}deg)` }}
               >
                 <TaskOrb
                   task={task}
