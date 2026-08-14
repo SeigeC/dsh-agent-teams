@@ -208,7 +208,8 @@
 }
 
 .edgeArrow {
-  fill: var(--dsw-alias-border-l3);
+  /* Follow the stroked line's color (blue when the flow is highlighted). */
+  fill: context-stroke;
 }
 
 .handlerLink {
