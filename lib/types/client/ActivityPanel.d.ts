@@ -55,9 +55,10 @@ export interface ActivityTeam {
     readonly messageCount: number;
     readonly captainInbox: readonly ActivityMessage[];
 }
-/** The top-right activity floater. Teams follow the current session: live
- * snapshots and historic card summaries are only shown while their captain
- * session is the one currently open. */
+/** The top-right activity floater. Live teams follow the current session:
+ * visible while their captain session — or one of their member sessions — is
+ * the one currently open. Historic card summaries and archived teams are
+ * captain-only recovery views. */
 export declare function ActivityPanel({ sessionsList, openSession }: {
     readonly sessionsList: ObservableSnapshot<SessionListState>;
     readonly openSession: (id: SessionId) => void;

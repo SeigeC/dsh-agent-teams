@@ -86,6 +86,17 @@ export interface ActivityTeam {
   readonly captainInbox: readonly ActivityMessage[]
 }
 
+/**
+ * Whether a session may view a team: its captain or one of its active
+ * members. Removed members are already filtered out of the snapshot, so
+ * they never match here.
+ */
+function teamVisibleTo(team: ActivityTeam, sessionId: string | undefined): boolean {
+  if (sessionId === undefined) return false
+  return team.captainSessionId === sessionId
+    || team.members.some((member) => member.id === sessionId)
+}
+
 /** Initial-letter fallback for unmatched roles. */
 function memberInitial(name: string): string {
   return name.trim().slice(0, 1).toUpperCase() || '?'
@@ -419,16 +430,18 @@ function TeamSection({ team, onNavigate, historic = false }: {
   )
 }
 
-/** The top-right activity floater. Teams follow the current session: live
- * snapshots and historic card summaries are only shown while their captain
- * session is the one currently open. */
+/** The top-right activity floater. Live teams follow the current session:
+ * visible while their captain session — or one of their member sessions — is
+ * the one currently open. Historic card summaries and archived teams are
+ * captain-only recovery views. */
 export function ActivityPanel({ sessionsList, openSession }: {
   readonly sessionsList: ObservableSnapshot<SessionListState>
   readonly openSession: (id: SessionId) => void
 }) {
-  // Navigating to a member's subagent transcript is an explicit departure:
-  // hide the floater immediately instead of waiting out the autocollapse
-  // grace, so the panel never lingers over the member session.
+  // Navigating to another transcript is an explicit departure: hide the
+  // floater immediately instead of waiting out the autocollapse grace, so
+  // the panel never lingers over the destination session. It reappears on
+  // the destination when the target session belongs to a team.
   const navigateToSession = (id: SessionId): void => {
     setOpen(false)
     setWasActive(false)
@@ -530,12 +543,14 @@ export function ActivityPanel({ sessionsList, openSession }: {
     }
   }, [])
 
-  // Teams follow the current session: live snapshots and historic card
-  // summaries are visible only while their captain session is current.
+  // Live teams follow the current session: visible while the current session
+  // is the captain or one of the team's active members. Historic card
+  // summaries and archived teams stay captain-only (recovery views for the
+  // owning conversation after live work ends).
   const visibleTeams = useMemo(
     // No current session (initial load): show nothing until one is picked,
     // so cross-session teams never leak into the floater.
-    () => (current === undefined ? [] : teams.filter((team) => team.captainSessionId === current)),
+    () => (current === undefined ? [] : teams.filter((team) => teamVisibleTo(team, current))),
     [teams, current],
   )
   const visibleHistoric = useMemo(

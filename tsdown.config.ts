@@ -49,6 +49,20 @@ const CSS_VIRTUAL_SUFFIX = '.mjs'
 
 const PLUGIN_ID = 'dsh-agent-teams'
 
+/**
+ * Canonical client-source prefix matching the upstream build machine. The
+ * CSS Modules class hash derives from `transform({ filename })`, and the
+ * `\0dsh-css:` virtual module id is embedded verbatim in chunk region
+ * comments — both must use the same path on every machine so artifacts are
+ * byte-identical to upstream (except real changes) and never leak a local
+ * path into the bundle.
+ */
+const CANONICAL_SRC_PREFIX = '/Users/nanmi/workspace/myself_code/dsh-agent-teams/src/client'
+
+/** Canonical virtual id → absolute source path (shared plugin state; hooks
+ * receive a PluginContext as `this`, so the map lives in module scope). */
+const cssSources = new Map<string, string>()
+
 const config: UserConfig = {
   name: `${PLUGIN_ID}/client`,
   entry: { client: 'lib/client/index.js' },
@@ -82,19 +96,24 @@ const config: UserConfig = {
     resolveId(source: string, importer: string | undefined) {
       if (!source.endsWith('.module.css')) return null
       const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
-      return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+      // Canonical virtual id: the id is embedded verbatim in chunk region
+      // comments, so it must not carry this machine's absolute path.
+      const canonicalId = `${CSS_VIRTUAL_PREFIX}${CANONICAL_SRC_PREFIX}/${basename(abs)}${CSS_VIRTUAL_SUFFIX}`
+      cssSources.set(canonicalId, abs)
+      return canonicalId
     },
     async load(virtualId: string) {
       if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
-      const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-      this.addWatchFile(fileId)
-      const source = readFileSync(fileId)
+      const abs = cssSources.get(virtualId)
+      if (abs === undefined) return null
+      this.addWatchFile(abs)
+      const source = readFileSync(abs)
       const { code, exports: cssExports } = transform({
         // Canonical path matching the upstream build machine: the CSS
         // Modules class hash derives from `filename`, so using the same
         // path keeps artifacts byte-identical to upstream (except real
         // changes) and reproducible on any machine.
-        filename: `/Users/nanmi/workspace/myself_code/dsh-agent-teams/src/client/${basename(fileId)}`,
+        filename: virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length),
         code: source,
         cssModules: { pattern: '[hash]_[local]' },
         minify: true,
@@ -103,7 +122,7 @@ const config: UserConfig = {
       for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
       return [
         `const css = ${JSON.stringify(code.toString())};`,
-        `const tagId = ${JSON.stringify(`${PLUGIN_ID}/${basename(fileId)}`)};`,
+        `const tagId = ${JSON.stringify(`${PLUGIN_ID}/${basename(abs)}`)};`,
         'if (typeof document !== \'undefined\' && document.querySelector(\'style[data-plugin-css=\' + JSON.stringify(tagId) + \']\') === null) {',
         '  const tag = document.createElement(\'style\');',
         `  tag.dataset.plugin = ${JSON.stringify(PLUGIN_ID)};`,
