@@ -54,9 +54,9 @@
   min-width: 0;
   padding: 4px 9px 4px 4px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-line-normal);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
-  background: var(--dsw-alias-bg-module);
+  background: var(--dsw-alias-bg-layer-1);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -65,8 +65,8 @@
 }
 
 .memberCard:hover {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, var(--dsw-alias-line-normal));
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-module));
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-layer-1));
 }
 
 .memberCard[data-activity='working'] {
@@ -97,7 +97,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  color: var(--dsw-alias-label-on-fill);
+  color: var(--dsw-alias-label-primary-foreground);
   font-size: 11px;
   font-weight: 600;
   line-height: 26px;
@@ -150,9 +150,9 @@
   width: 200px;
   min-height: 96px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-line-normal);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-fill-neutral) 55%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-markdown-tag) 55%, transparent);
 }
 
 .kanbanColumnHead {
@@ -172,11 +172,11 @@
 }
 
 .kanbanColumnHead[data-state='completed'] {
-  color: var(--dsw-alias-state-success);
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .kanbanColumnHead[data-state='failed'] {
-  color: var(--dsw-alias-state-danger);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .kanbanCount {
@@ -188,7 +188,7 @@
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 9px;
-  background: var(--dsw-alias-bg-fill-neutral);
+  background: var(--dsw-alias-markdown-tag);
   color: var(--dsw-alias-label-tertiary);
   font-size: 10px;
   font-weight: 600;
@@ -208,7 +208,7 @@
   gap: 3px;
   padding: 7px 9px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-line-normal);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-left: 3px solid var(--dsw-alias-label-tertiary);
   border-radius: 9px;
   background: var(--dsw-alias-bg-module-platform);
@@ -219,16 +219,16 @@
 }
 
 .taskCard[data-state='completed'] {
-  border-left-color: var(--dsw-alias-state-success);
+  border-left-color: var(--dsw-alias-state-success-primary);
 }
 
 .taskCard[data-state='failed'] {
-  border-left-color: var(--dsw-alias-state-danger);
-  border-color: color-mix(in srgb, var(--dsw-alias-state-danger) 35%, var(--dsw-alias-line-normal));
+  border-left-color: var(--dsw-alias-state-error-primary);
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, var(--dsw-alias-border-l2));
 }
 
 .taskCard[data-state='claimed'] {
-  border-left-color: var(--dsw-alias-state-warning);
+  border-left-color: var(--dsw-alias-state-warn-primary);
 }
 
 .taskCardHead {
@@ -255,7 +255,7 @@
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 8px;
-  background: var(--dsw-alias-bg-fill-neutral);
+  background: var(--dsw-alias-markdown-tag);
   color: var(--dsw-alias-label-secondary);
   font-size: 9px;
   font-weight: 600;
@@ -263,22 +263,22 @@
 }
 
 .taskBadge[data-state='running'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, var(--dsw-alias-bg-fill-neutral));
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, var(--dsw-alias-markdown-tag));
   color: var(--dsw-alias-state-business-primary);
 }
 
 .taskBadge[data-state='completed'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-success) 14%, var(--dsw-alias-bg-fill-neutral));
-  color: var(--dsw-alias-state-success);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, var(--dsw-alias-markdown-tag));
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .taskBadge[data-state='failed'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-danger) 14%, var(--dsw-alias-bg-fill-neutral));
-  color: var(--dsw-alias-state-danger);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, var(--dsw-alias-markdown-tag));
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .taskBadge[data-state='cancelled'] {
-  background: var(--dsw-alias-bg-fill-neutral);
+  background: var(--dsw-alias-markdown-tag);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -331,7 +331,7 @@
   box-sizing: border-box;
   border-radius: 8px;
   background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-on-fill);
+  color: var(--dsw-alias-label-primary-foreground);
   font-size: 9.5px;
   font-weight: 600;
   line-height: 16px;

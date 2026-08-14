@@ -6,7 +6,7 @@
   min-width: 0;
   padding: 10px 12px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-line-normal);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background: var(--dsw-alias-bg-module-platform);
 }
@@ -23,7 +23,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 1px solid var(--dsw-alias-line-strong);
+  border: 1px solid var(--dsw-alias-border-l3);
   object-fit: cover;
   background: #0B1D33;
 }
@@ -51,9 +51,9 @@
 .panelButton {
   flex: none;
   padding: 2px 8px;
-  border: 1px solid var(--dsw-alias-line-strong);
+  border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 999px;
-  background: var(--dsw-alias-bg-module);
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 10.5px;
@@ -86,9 +86,9 @@
   gap: 5px;
   max-width: 160px;
   padding: 3px 8px 3px 3px;
-  border: 1px solid var(--dsw-alias-line-normal);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
-  background: var(--dsw-alias-bg-module);
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 11px;
@@ -100,7 +100,7 @@
 
 .member:hover {
   border-color: var(--dsw-alias-state-business-primary);
-  background: var(--dsw-alias-bg-fill-neutral);
+  background: var(--dsw-alias-markdown-tag);
 }
 
 .member:focus-visible {
@@ -112,7 +112,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 1px solid var(--dsw-alias-line-strong);
+  border: 1px solid var(--dsw-alias-border-l3);
   object-fit: cover;
   background: #0B1D33;
 }
@@ -124,8 +124,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--dsw-alias-bg-fill-business);
-  color: var(--dsw-alias-label-on-fill);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-label-primary-foreground);
   font-size: 10px;
   font-weight: 600;
   line-height: 20px;
