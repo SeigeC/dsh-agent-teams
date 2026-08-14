@@ -186,6 +186,69 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
 
 
 /**
+/** Requirement rail groups in display order (everything the team carries). */
+const RAIL_GROUPS: readonly { readonly key: string; readonly label: string; readonly match: (task: ActivityTask) => boolean }[] = [
+  { key: 'pending', label: '未开始', match: (task) => task.status === 'pending' || task.status === 'claimed' },
+  { key: 'running', label: '进行中', match: (task) => task.status === 'in_progress' },
+  { key: 'done', label: '已完成', match: (task) => task.status === 'completed' },
+  { key: 'failed', label: '异常', match: (task) => task.status === 'failed' || task.status === 'cancelled' },
+]
+
+/**
+ * The left requirement rail: every requirement grouped by status. Hovering
+ * one highlights its whole flow path across the worker orbs.
+ */
+function RequirementRail({ team, focusedTaskId, related, onFocus, onBlur }: {
+  readonly team: ActivityTeam
+  readonly focusedTaskId: string | null
+  readonly related: ReadonlySet<string> | null
+  readonly onFocus: (taskId: string) => void
+  readonly onBlur: () => void
+}) {
+  return (
+    <aside className={css.requirementRail} aria-label="需求列表">
+      {RAIL_GROUPS.map((group) => {
+        const tasks = team.tasks.filter(group.match)
+        if (tasks.length === 0) return null
+        return (
+          <div key={group.key} className={css.railGroup}>
+            <header className={css.railGroupHead}>
+              <span>{group.label}</span>
+              <span className={css.railCount}>{tasks.length}</span>
+            </header>
+            {tasks.map((task) => {
+              const tone = taskTone(task.state, task.status)
+              const hot = focusedTaskId !== null && related?.has(task.id) === true
+              const dimmed = focusedTaskId !== null && !hot
+              return (
+                <button
+                  type="button"
+                  key={task.id}
+                  className={css.railItem}
+                  data-state={tone}
+                  data-hot={hot}
+                  data-dimmed={dimmed}
+                  title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, team.tasks)}` : ''}`}
+                  onMouseEnter={() => { onFocus(task.id) }}
+                  onMouseLeave={onBlur}
+                  onFocus={() => { onFocus(task.id) }}
+                  onBlur={onBlur}
+                >
+                  <span className={css.railItemId}>{task.id}</span>
+                  <span className={css.railItemSubject}>{task.subject}</span>
+                  <span className={css.railItemOwner}>{task.assignee !== '' ? `→ ${task.assignee}` : '待认领'}</span>
+                </button>
+              )
+            })}
+          </div>
+        )
+      })}
+    </aside>
+  )
+}
+
+
+/**
  * Board content for one team: one node per worker, requirement edges drawn
  * between workers (a requirement flows from its dependency's worker to its
  * own worker), and hovering a requirement highlights its whole flow path.
@@ -212,7 +275,6 @@ export function FlowBoard({ team, onNavigate }: {
     return names
   }, [related, team.tasks])
   const completedCount = team.tasks.filter((task) => task.status === 'completed').length
-  const unassigned = team.tasks.filter((task) => task.assignee === '')
 
   // Measure worker nodes and the container so edges can be drawn between
   // nodes in the SVG layer (re-measured on layout changes).
@@ -259,22 +321,15 @@ export function FlowBoard({ team, onNavigate }: {
         </span>
       </header>
 
-      {unassigned.length > 0 && (
-        <div className={css.unassignedBar}>
-          <span className={css.unassignedLabel}>待认领</span>
-          {unassigned.map((task) => (
-            <TaskOrb
-              key={task.id}
-              task={task}
-              tasks={team.tasks}
-              dimmed={related !== null && !related.has(task.id)}
-              hot={related !== null && related.has(task.id)}
-              onFocus={setFocusedTaskId}
-              onBlur={() => { setFocusedTaskId(null) }}
-            />
-          ))}
-        </div>
-      )}
+
+      <div className={css.boardLayout}>
+        <RequirementRail
+          team={team}
+          focusedTaskId={focusedTaskId}
+          related={related}
+          onFocus={setFocusedTaskId}
+          onBlur={() => { setFocusedTaskId(null) }}
+        />
 
       <div className={css.flowArea} ref={containerRef}>
         <svg
@@ -352,6 +407,8 @@ export function FlowBoard({ team, onNavigate }: {
             />
           ))}
         </div>
+      </div>
+
       </div>
     </section>
   )
