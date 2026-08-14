@@ -228,6 +228,7 @@ function RequirementRail({ team, focusedTaskId, related, onFocus, onBlur }: {
                   data-state={tone}
                   data-hot={hot}
                   data-dimmed={dimmed}
+                  data-rail-task={task.id}
                   title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, team.tasks)}` : ''}`}
                   onMouseEnter={() => { onFocus(task.id) }}
                   onMouseLeave={onBlur}
@@ -260,6 +261,7 @@ export function FlowBoard({ team, onNavigate }: {
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [nodeRects, setNodeRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
+  const [railRects, setRailRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const edges = useMemo(() => buildEdges(team.tasks), [team.tasks])
   const related = useMemo(
@@ -287,7 +289,13 @@ export function FlowBoard({ team, onNavigate }: {
         const name = el.dataset.workerName
         if (name !== undefined) map.set(name, el.getBoundingClientRect())
       }
+      const railMap = new Map<string, DOMRect>()
+      for (const el of container.querySelectorAll<HTMLElement>('[data-rail-task]')) {
+        const taskId = el.dataset.railTask
+        if (taskId !== undefined) railMap.set(taskId, el.getBoundingClientRect())
+      }
       setNodeRects(map)
+      setRailRects(railMap)
       setContainerSize({ width: container.clientWidth, height: container.clientHeight })
     }
     update()
@@ -322,7 +330,7 @@ export function FlowBoard({ team, onNavigate }: {
       </header>
 
 
-      <div className={css.boardLayout}>
+      <div className={css.boardLayout} ref={containerRef}>
         <RequirementRail
           team={team}
           focusedTaskId={focusedTaskId}
@@ -331,7 +339,22 @@ export function FlowBoard({ team, onNavigate }: {
           onBlur={() => { setFocusedTaskId(null) }}
         />
 
-      <div className={css.flowArea} ref={containerRef}>
+      <div className={css.flowArea}>
+
+        <div className={css.workerGrid}>
+          {team.members.map((member) => (
+            <WorkerNode
+              key={member.id}
+              member={member}
+              tasks={team.tasks}
+              focusedRelated={related}
+              onFocus={setFocusedTaskId}
+              onBlur={() => { setFocusedTaskId(null) }}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      </div>
         <svg
           className={css.flowSvg}
           width={containerSize.width}
@@ -392,22 +415,37 @@ export function FlowBoard({ team, onNavigate }: {
               </g>
             )
           })}
-        </svg>
+          {team.tasks.map((task) => {
+            if (task.assignee === '') return null
+            const rail = railRects.get(task.id)
+            const orb = nodeRects.get(task.assignee)
+            if (rail === undefined || orb === undefined || containerRect === null) return null
+            const x1 = rail.right - containerRect.left
+            const y1 = rail.top + rail.height / 2 - containerRect.top
+            const cx = orb.left + orb.width / 2 - containerRect.left
+            const cy = orb.top + orb.height / 2 - containerRect.top
+            const dx = x1 - cx
+            const dy = y1 - cy
+            const length = Math.hypot(dx, dy) || 1
+            const radius = orb.width / 2 - 2
+            const x2 = cx + (dx / length) * radius
+            const y2 = cy + (dy / length) * radius
+            const bend = Math.max(16, Math.abs(x1 - x2) * 0.4)
+            const path = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
+            const hot = related !== null && related.has(task.id)
+            const dimmed = related !== null && !hot
+            return (
+              <path
+                key={`handler:${task.id}`}
+                className={css.handlerLink}
+                data-hot={hot}
+                data-dimmed={dimmed}
+                d={path}
+              />
+            )
+          })}
 
-        <div className={css.workerGrid}>
-          {team.members.map((member) => (
-            <WorkerNode
-              key={member.id}
-              member={member}
-              tasks={team.tasks}
-              focusedRelated={related}
-              onFocus={setFocusedTaskId}
-              onBlur={() => { setFocusedTaskId(null) }}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
-      </div>
+        </svg>
 
       </div>
     </section>

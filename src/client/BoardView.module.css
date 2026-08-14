@@ -45,6 +45,7 @@
 /* flow view: worker nodes + requirement edges */
 
 .boardLayout {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 16px;
@@ -52,6 +53,8 @@
 }
 
 .requirementRail {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: none;
   flex-direction: column;
@@ -179,6 +182,7 @@
 }
 
 .flowSvg {
+  z-index: 0;
   position: absolute;
   inset: 0;
   width: 100%;
@@ -206,6 +210,27 @@
 .edgeArrow {
   fill: var(--dsw-alias-border-l3);
 }
+
+.handlerLink {
+  fill: none;
+  stroke: var(--dsw-alias-border-l3);
+  stroke-width: 1.25px;
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
+  transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.handlerLink[data-hot='true'] {
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 2px;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+
+.handlerLink[data-dimmed='true'] {
+  opacity: 0.12;
+}
+
 
 .edgeLabel {
   pointer-events: auto;
@@ -236,7 +261,10 @@
 
 .edgeLabel[data-dimmed='true'] {
   opacity: 0.15;
-}.workerGrid {
+}
+
+.workerGrid {
+  z-index: 1;
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
