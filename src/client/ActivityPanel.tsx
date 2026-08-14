@@ -30,6 +30,7 @@ import {
 import { activityPanelExpandedForSession, relatedTaskIds, taskStages } from './activity-model.ts'
 import { ACTION_ART, LEAD_ART, memberArtUrl } from './artwork.ts'
 import { OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
+import { BOARD_OPEN_ATTRIBUTE } from './BoardView.tsx'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
 import css from './ActivityPanel.module.css'
 
@@ -302,6 +303,20 @@ function TeamSection({ team, onNavigate, historic = false }: {
 }
 
 
+/** Whether the task board tab is currently active (announced on the
+ * document root by the board overlay). While the board is open the floater
+ * hides entirely so it never covers the board or steals its hover events. */
+function useBoardOpen(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange)
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: [BOARD_OPEN_ATTRIBUTE] })
+      return () => { observer.disconnect() }
+    },
+    () => document.documentElement.hasAttribute(BOARD_OPEN_ATTRIBUTE),
+  )
+}
+
 /** The top-right activity floater. Live teams follow the current session:
  * visible while their captain session — or one of their member sessions — is
  * the one currently open. Historic card summaries and archived teams are
@@ -334,6 +349,7 @@ export function ActivityPanel({ sessionsList, openSession }: {
   useEffect(() => { currentRef.current = current }, [current])
   const mountedAtRef = useRef(performance.now())
   const expanded = activityPanelExpandedForSession(open, openOwner, current)
+  const boardOpen = useBoardOpen()
 
   // This portal survives conversation route changes. Gate expansion by its
   // owning session during render, then clear stale state before paint. This
@@ -350,12 +366,13 @@ export function ActivityPanel({ sessionsList, openSession }: {
   // The activity panel is a body portal, so announce its open state on body.
   // CSS can then make the conversation column yield space without knowing the
   // host shell's hashed module class names. Narrow viewports keep overlay mode.
+  // While the task board is open the panel is hidden and must not yield space.
   useLayoutEffect(() => {
     const root = document.documentElement
-    if (expanded) root.setAttribute(PANEL_OPEN_ATTRIBUTE, '')
+    if (expanded && !boardOpen) root.setAttribute(PANEL_OPEN_ATTRIBUTE, '')
     else root.removeAttribute(PANEL_OPEN_ATTRIBUTE)
     return () => { root.removeAttribute(PANEL_OPEN_ATTRIBUTE) }
-  }, [expanded])
+  }, [expanded, boardOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -475,6 +492,10 @@ export function ActivityPanel({ sessionsList, openSession }: {
     [visibleTeams],
   )
   const hasTeams = visibleCount > 0
+
+  // The task board is a full page switch: hide the floater entirely while
+  // it is open (see useBoardOpen).
+  if (boardOpen) return null
 
   if (!hasTeams && !expanded) return null
 

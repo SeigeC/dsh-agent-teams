@@ -28,6 +28,11 @@ export interface TeamTask {
   subject: string
   /** What needs to be done. */
   description?: string
+  /** Name of the requirement this task is a stage of (e.g. a feature whose
+   * stages are docs, development, testing). Tasks sharing a requirement
+   * form that requirement's stages; tasks without one are their own
+   * single-stage requirement. */
+  requirement?: string
   status: TaskStatus
   /** Member name the task is assigned to; unassigned tasks await a claim. */
   assignee?: string

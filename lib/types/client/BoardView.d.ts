@@ -27,6 +27,10 @@ export declare function FlowBoard({ team, onNavigate }: {
     readonly onNavigate: (id: SessionId) => void;
 }): import("react").JSX.Element;
 export declare function findConversationTabBar(): HTMLElement | null;
+/** Root marker while the board tab is active: the activity floater hides
+ * itself when this is present so it never covers the board or steals its
+ * hover events. */
+export declare const BOARD_OPEN_ATTRIBUTE = "data-agent-teams-board-open";
 /**
  * The main-interface task board: injects the 任务看板 tab and, while the
  * tab is active, replaces the conversation content panel with the board

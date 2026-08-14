@@ -22,6 +22,8 @@ export interface ActivityMember {
 export interface ActivityTask {
   readonly id: string
   readonly subject: string
+  /** Requirement this task is a stage of ('' = its own requirement). */
+  readonly requirement: string
   readonly status: string
   readonly state: 'blocked' | 'open' | 'running' | 'completed'
   readonly assignee: string

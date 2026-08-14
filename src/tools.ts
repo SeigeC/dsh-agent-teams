@@ -363,6 +363,10 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
     parameters: {
       subject: { type: 'string', required: true, description: 'Brief title for the task.' },
       description: { type: 'string', description: 'What needs to be done, in detail.' },
+      requirement: {
+        type: 'string',
+        description: 'Name of the requirement this task is a stage of, e.g. "开发一个功能". Tasks sharing a requirement form that requirement\'s stages (docs, development, testing, ...). Omit to make the task its own single-stage requirement.',
+      },
       dependencies: {
         type: 'array',
         items: { type: 'string' },
@@ -404,6 +408,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): void
           id: `t${fresh.taskSeq + 1}`,
           subject: args.subject,
           description: args.description,
+          requirement: args.requirement,
           status: 'pending',
           assignee: args.assignee,
           dependencies,

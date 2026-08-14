@@ -264,43 +264,35 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
 
 /**
 /** Requirement rail groups in display order (everything the team carries). */
-/** One requirement: an independent unit flowing through worker stages. */
+/** One requirement: an independent unit (e.g. a feature) whose stages are
+ * its individual work items (write docs, develop, test, ...). */
 interface Requirement {
+  /** Stable id: the shared requirement name, or the task id for
+   * single-stage requirements. */
   readonly id: string
-  readonly root: ActivityTask
+  /** Display subject: the requirement name (or the single task's). */
+  readonly subject: string
   readonly stages: readonly ActivityTask[]
 }
 
-/** Build requirements from tasks: a requirement is a root task (no
- * dependencies) plus every task that transitively depends on it. Each task
- * belongs to the requirement of its root, so requirements never overlap. */
+/** Build requirements from tasks: tasks sharing a `requirement` name form
+ * that requirement's stages; tasks without one are their own single-stage
+ * requirement. Requirements are independent — no cross-requirement links. */
 function buildRequirements(tasks: readonly ActivityTask[]): Requirement[] {
-  const byId = new Map(tasks.map((task) => [task.id, task]))
-  const rootOf = new Map<string, string>()
-  const findRoot = (task: ActivityTask): string => {
-    const cached = rootOf.get(task.id)
-    if (cached !== undefined) return cached
-    const first = task.dependencies[0]
-    const dep = first !== undefined ? byId.get(first) : undefined
-    const root = dep !== undefined ? findRoot(dep) : task.id
-    rootOf.set(task.id, root)
-    return root
-  }
-  const byRoot = new Map<string, ActivityTask[]>()
+  const byName = new Map<string, ActivityTask[]>()
   for (const task of tasks) {
-    const root = findRoot(task)
-    const list = byRoot.get(root) ?? []
+    const key = task.requirement !== '' ? task.requirement : task.id
+    const list = byName.get(key) ?? []
     list.push(task)
-    byRoot.set(root, list)
+    byName.set(key, list)
   }
-  return [...byRoot.entries()].map(([rootId, stages]) => {
-    const root = byId.get(rootId) ?? stages[0]!
-    return {
-      id: rootId,
-      root,
+  return [...byName.entries()]
+    .map(([key, stages]) => ({
+      id: key,
+      subject: stages[0]!.requirement !== '' ? stages[0]!.requirement : stages[0]!.subject,
       stages: stages.slice().sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true })),
-    }
-  })
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }))
 }
 
 /** Overall status of one requirement, derived from its stages. */
@@ -351,6 +343,7 @@ function RequirementRail({ requirements, focusedRequirementId, related, onFocus,
               const hot = focusedRequirementId !== null && focusedRequirementId === requirement.id
               const dimmed = focusedRequirementId !== null && !hot
               const holder = currentHolderOf(requirement)
+              const stagesSummary = requirement.stages.map((stage) => stage.id).join(' → ')
               return (
                 <button
                   type="button"
@@ -360,14 +353,13 @@ function RequirementRail({ requirements, focusedRequirementId, related, onFocus,
                   data-hot={hot}
                   data-dimmed={dimmed}
                   data-rail-task={requirement.id}
-                  title={`${requirement.id} ${requirement.root.subject} · ${requirement.stages.length} 个环节`}
+                  title={`${requirement.subject} · 环节 ${stagesSummary}`}
                   onMouseEnter={() => { onFocus(requirement.id) }}
                   onMouseLeave={onBlur}
                   onFocus={() => { onFocus(requirement.id) }}
                   onBlur={onBlur}
                 >
-                  <span className={css.railItemId}>{requirement.id}</span>
-                  <span className={css.railItemSubject}>{requirement.root.subject}</span>
+                  <span className={css.railItemSubject}>{requirement.subject}</span>
                   <span className={css.railItemOwner}>
                     {requirement.stages.length > 1 ? `${requirement.stages.length} 环节 · ` : ''}{holder}
                   </span>
@@ -666,6 +658,11 @@ function findConversationHeader(tabBar: HTMLElement): HTMLElement | null {
   return el
 }
 
+/** Root marker while the board tab is active: the activity floater hides
+ * itself when this is present so it never covers the board or steals its
+ * hover events. */
+export const BOARD_OPEN_ATTRIBUTE = 'data-agent-teams-board-open'
+
 /** The conversation root: the first ancestor tall enough to span the
  * viewport (the header is the same width, so width cannot distinguish
  * them; height can). */
@@ -764,6 +761,16 @@ export function BoardOverlay({ sessionsList, openSession }: {
 
   // Session switch closes the board (the shell resets to Chat on navigation).
   useEffect(() => { setOpen(false) }, [current])
+
+  // Announce the board on the document root while the tab is active, so the
+  // activity floater hides itself and never covers the board or steals its
+  // hover events.
+  useEffect(() => {
+    const root = document.documentElement
+    if (open) root.setAttribute(BOARD_OPEN_ATTRIBUTE, '')
+    else root.removeAttribute(BOARD_OPEN_ATTRIBUTE)
+    return () => { root.removeAttribute(BOARD_OPEN_ATTRIBUTE) }
+  }, [open])
 
   // While the board tab is active, clear the shell tabs' active styles so
   // Chat/Trajectory don't stay highlighted; restore the previously active

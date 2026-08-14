@@ -38,6 +38,8 @@ export interface TeamActivityMember {
 export interface TeamActivityTask {
   readonly id: string
   readonly subject: string
+  /** Requirement this task is a stage of ('' = its own requirement). */
+  readonly requirement: string
   readonly status: string
   readonly state: VisualTaskState
   readonly assignee: string
@@ -135,6 +137,7 @@ export async function assembleTeamSnapshot(
     tasks: tasks.map((task) => ({
       id: task.id,
       subject: task.subject,
+      requirement: task.requirement ?? '',
       status: task.status,
       state: taskVisualState(task.status, task.dependencies, tasks),
       assignee: task.assignee ?? '',

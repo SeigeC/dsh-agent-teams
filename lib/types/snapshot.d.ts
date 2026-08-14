@@ -27,6 +27,8 @@ export interface TeamActivityMember {
 export interface TeamActivityTask {
     readonly id: string;
     readonly subject: string;
+    /** Requirement this task is a stage of ('' = its own requirement). */
+    readonly requirement: string;
     readonly status: string;
     readonly state: VisualTaskState;
     readonly assignee: string;
