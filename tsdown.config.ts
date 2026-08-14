@@ -90,7 +90,11 @@ const config: UserConfig = {
       this.addWatchFile(fileId)
       const source = readFileSync(fileId)
       const { code, exports: cssExports } = transform({
-        filename: fileId,
+        // Canonical path matching the upstream build machine: the CSS
+        // Modules class hash derives from `filename`, so using the same
+        // path keeps artifacts byte-identical to upstream (except real
+        // changes) and reproducible on any machine.
+        filename: `/Users/nanmi/workspace/myself_code/dsh-agent-teams/src/client/${basename(fileId)}`,
         code: source,
         cssModules: { pattern: '[hash]_[local]' },
         minify: true,
