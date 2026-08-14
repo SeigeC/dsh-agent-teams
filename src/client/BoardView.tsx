@@ -11,14 +11,17 @@
  * @module dsh-agent-teams/client/board
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ObservableSnapshot, SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
+import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
-  type ActivityTask, type ActivityTeam, accentOf, dependencyLabel,
-  memberInitial, memberStateLabel, memberStatusText, taskStatusLabel, taskTone, teamVisibleTo,
+  type ActivityMember, type ActivityTask, type ActivityTeam, accentOf,
+  dependencyLabel, memberDotState, memberInitial, memberStateLabel, memberStatusText,
+  taskStatusLabel, taskTone, teamVisibleTo,
 } from './activity-ui.ts'
+import { relatedTaskIds } from './activity-model.ts'
 import { memberArtUrl } from './artwork.ts'
 import css from './BoardView.module.css'
 
@@ -43,47 +46,162 @@ const BOARD_GLOBAL_CSS = `
 [data-agent-teams-board-panel]{flex:1 1 auto;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;box-sizing:border-box;padding:12px 16px;background:var(--dsw-alias-bg-base)}
 `
 
-/** One task card in a board column. */
-export function TaskCard({ task, tasks }: {
+/** One flow edge: a requirement handed from one worker to another. */
+interface FlowEdge {
+  readonly id: string
+  /** The requirement flowing (the dependent task). */
   readonly task: ActivityTask
+  /** The upstream requirement it depends on. */
+  readonly dep: ActivityTask
+  /** Sender worker (the dependency's assignee). */
+  readonly from: string
+  /** Receiver worker (this task's assignee). */
+  readonly to: string
+}
+
+/** Build worker-to-worker requirement edges. Same-worker dependencies and
+ * unassigned tasks stay inside the node / pool instead of becoming edges. */
+function buildEdges(tasks: readonly ActivityTask[]): FlowEdge[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]))
+  const edges: FlowEdge[] = []
+  for (const task of tasks) {
+    if (task.assignee === '') continue
+    for (const depId of task.dependencies) {
+      const dep = byId.get(depId)
+      if (dep === undefined || dep.assignee === '' || dep.assignee === task.assignee) continue
+      edges.push({ id: `${task.id}:${depId}`, task, dep, from: dep.assignee, to: task.assignee })
+    }
+  }
+  return edges
+}
+
+/** One worker node: avatar, name, live state, and the requirements on it. */
+function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate }: {
+  readonly member: ActivityMember
   readonly tasks: readonly ActivityTask[]
+  readonly focusedRelated: ReadonlySet<string> | null
+  readonly onFocus: (taskId: string) => void
+  readonly onBlur: () => void
+  readonly onNavigate: (id: SessionId) => void
 }) {
-  const tone = taskTone(task.state, task.status)
+  const owned = tasks.filter((task) => task.assignee === member.name)
+  const involved = focusedRelated === null || owned.some((task) => focusedRelated.has(task.id))
   return (
-    <div className={css.taskCard} data-state={tone} title={task.subject}>
-      <span className={css.taskCardHead}>
-        <span className={css.taskCardId}>{task.id}</span>
-        <span className={css.taskBadge} data-state={tone}>{taskStatusLabel(task.status)}</span>
-      </span>
-      <span className={css.taskCardSubject}>{task.subject}</span>
-      <span className={css.taskCardRoute}>
-        <span className={css.taskOwner}>{task.assignee || '待认领'}</span>
-        {task.dependencies.length > 0 && (
-          <span className={css.taskCardDeps}>依赖 {dependencyLabel(task, tasks)}</span>
-        )}
-      </span>
+    <div
+      className={css.workerNode}
+      data-worker-node
+      data-worker-name={member.name}
+      data-dimmed={focusedRelated !== null && !involved}
+      data-hot={focusedRelated !== null && involved}
+    >
+      <button
+        type="button"
+        className={css.workerHead}
+        onClick={() => { if (member.id !== '') onNavigate(member.id as SessionId) }}
+        title={`${member.name} · ${memberStatusText(member, tasks)}`}
+      >
+        <span className={css.workerAvatar} data-activity={member.activity}>
+          {memberArtUrl(member.name, member.role) !== null ? (
+            <img className={css.workerArt} src={memberArtUrl(member.name, member.role) ?? ''} alt="" aria-hidden />
+          ) : (
+            <span className={css.workerInitial} style={{ background: accentOf(member.id) }}>{memberInitial(member.name)}</span>
+          )}
+        </span>
+        <span className={css.workerInfo}>
+          <span className={css.workerName}>{member.name}</span>
+          <span className={css.workerRole}>{member.role}</span>
+        </span>
+        <span className={css.workerDot}><StateDot state={memberDotState(member, tasks)} /></span>
+        {member.unread > 0 && <span className={css.unreadPill}>{member.unread}</span>}
+      </button>
+      <div className={css.workerStatus} data-activity={member.activity}>{memberStateLabel(member, tasks)}</div>
+      <div className={css.workerTasks}>
+        {owned.length === 0 && <span className={css.taskEmpty}>暂无任务</span>}
+        {owned.map((task) => (
+          <button
+            type="button"
+            key={task.id}
+            className={css.taskChip}
+            data-state={taskTone(task.state, task.status)}
+            data-dimmed={focusedRelated !== null && !focusedRelated.has(task.id)}
+            title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, tasks)}` : ''}`}
+            onMouseEnter={() => { onFocus(task.id) }}
+            onMouseLeave={onBlur}
+            onFocus={() => { onFocus(task.id) }}
+            onBlur={onBlur}
+          >
+            <span className={css.taskChipId}>{task.id}</span>
+            <span className={css.taskBadge} data-state={taskTone(task.state, task.status)}>{taskStatusLabel(task.status)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
-/** Board columns in workflow order; failed/cancelled land in the last one. */
-const BOARD_COLUMNS: readonly { readonly key: string; readonly label: string; readonly tone: string; readonly match: (status: string) => boolean }[] = [
-  { key: 'pending', label: '待认领', tone: 'open', match: (status) => status === 'pending' },
-  { key: 'claimed', label: '已认领', tone: 'claimed', match: (status) => status === 'claimed' },
-  { key: 'in_progress', label: '进行中', tone: 'running', match: (status) => status === 'in_progress' },
-  { key: 'completed', label: '已完成', tone: 'completed', match: (status) => status === 'completed' },
-  { key: 'failed', label: '异常', tone: 'failed', match: (status) => status === 'failed' || status === 'cancelled' },
-]
-
 /**
- * Board content for one team: a member status strip on top (who is doing
- * what right now) plus per-status task columns in workflow order.
+ * Board content for one team: one node per worker, requirement edges drawn
+ * between workers (a requirement flows from its dependency's worker to its
+ * own worker), and hovering a requirement highlights its whole flow path.
  */
-export function KanbanBoard({ team, onNavigate }: {
+export function FlowBoard({ team, onNavigate }: {
   readonly team: ActivityTeam
   readonly onNavigate: (id: SessionId) => void
 }) {
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [nodeRects, setNodeRects] = useState<ReadonlyMap<string, DOMRect>>(new Map())
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  const edges = useMemo(() => buildEdges(team.tasks), [team.tasks])
+  const related = useMemo(
+    () => (focusedTaskId === null ? null : relatedTaskIds(focusedTaskId, team.tasks)),
+    [focusedTaskId, team.tasks],
+  )
+  const involvedWorkers = useMemo(() => {
+    if (related === null) return null
+    const names = new Set<string>()
+    for (const task of team.tasks) {
+      if (related.has(task.id) && task.assignee !== '') names.add(task.assignee)
+    }
+    return names
+  }, [related, team.tasks])
   const completedCount = team.tasks.filter((task) => task.status === 'completed').length
+  const unassigned = team.tasks.filter((task) => task.assignee === '')
+
+  // Measure worker nodes and the container so edges can be drawn between
+  // nodes in the SVG layer (re-measured on layout changes).
+  useLayoutEffect(() => {
+    const update = (): void => {
+      const container = containerRef.current
+      if (container === null) return
+      const map = new Map<string, DOMRect>()
+      for (const el of container.querySelectorAll<HTMLElement>('[data-worker-node]')) {
+        const name = el.dataset.workerName
+        if (name !== undefined) map.set(name, el.getBoundingClientRect())
+      }
+      setNodeRects(map)
+      setContainerSize({ width: container.clientWidth, height: container.clientHeight })
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    const container = containerRef.current
+    if (container !== null) observer.observe(container)
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  // Parallel edges between the same worker pair fan out vertically.
+  const pairTotal = new Map<string, number>()
+  for (const edge of edges) {
+    const key = `${edge.from}>${edge.to}`
+    pairTotal.set(key, (pairTotal.get(key) ?? 0) + 1)
+  }
+  const pairIndex = new Map<string, number>()
+  const containerRect = containerRef.current?.getBoundingClientRect() ?? null
+
   return (
     <section className={css.board} data-board data-team-id={team.teamId}>
       <header className={css.boardHead}>
@@ -95,63 +213,111 @@ export function KanbanBoard({ team, onNavigate }: {
         </span>
       </header>
 
-      <div className={css.memberStrip} aria-label="成员实时状态">
-        {team.members.map((member) => (
-          <button
-            type="button"
-            key={member.id}
-            className={css.memberCard}
-            data-activity={member.activity}
-            onClick={() => { if (member.id !== '') onNavigate(member.id as SessionId) }}
-            title={`${member.name} · ${memberStatusText(member, team.tasks)}`}
-          >
-            <span className={css.memberCardAvatar} data-activity={member.activity}>
-              {memberArtUrl(member.name, member.role) !== null ? (
-                <img className={css.memberArt} src={memberArtUrl(member.name, member.role) ?? ''} alt="" aria-hidden />
-              ) : (
-                <span className={css.memberCardInitial} style={{ background: accentOf(member.id) }}>{memberInitial(member.name)}</span>
-              )}
-            </span>
-            <span className={css.memberCardInfo}>
-              <span className={css.memberCardName}>{member.name}</span>
-              <span className={css.memberCardStatus} data-activity={member.activity}>
-                {memberStateLabel(member, team.tasks)}
-              </span>
-            </span>
-            {member.unread > 0 && <span className={css.unreadPill}>{member.unread}</span>}
-          </button>
-        ))}
-      </div>
+      {unassigned.length > 0 && (
+        <div className={css.unassignedBar}>
+          <span className={css.unassignedLabel}>待认领</span>
+          {unassigned.map((task) => (
+            <button
+              type="button"
+              key={task.id}
+              className={css.taskChip}
+              data-state={taskTone(task.state, task.status)}
+              data-dimmed={related !== null && !related.has(task.id)}
+              title={`${task.id} ${task.subject}`}
+              onMouseEnter={() => { setFocusedTaskId(task.id) }}
+              onMouseLeave={() => { setFocusedTaskId(null) }}
+              onFocus={() => { setFocusedTaskId(task.id) }}
+              onBlur={() => { setFocusedTaskId(null) }}
+            >
+              <span className={css.taskChipId}>{task.id}</span>
+              <span className={css.taskBadge} data-state={taskTone(task.state, task.status)}>{taskStatusLabel(task.status)}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className={css.kanbanColumns}>
-        {BOARD_COLUMNS.map((column) => {
-          const tasks = team.tasks.filter((task) => column.match(task.status))
-          return (
-            <div key={column.key} className={css.kanbanColumn} data-column={column.key}>
-              <header className={css.kanbanColumnHead} data-state={column.tone}>
-                <span>{column.label}</span>
-                <span className={css.kanbanCount}>{tasks.length}</span>
-              </header>
-              <div className={css.kanbanColumnBody}>
-                {tasks.length === 0 && <span className={css.taskEmpty}>暂无任务</span>}
-                {tasks.map((task) => (
-                  <TaskCard key={task.id} task={task} tasks={team.tasks} />
-                ))}
-              </div>
-            </div>
-          )
-        })}
+      <div className={css.flowArea} ref={containerRef}>
+        <svg
+          className={css.flowSvg}
+          width={containerSize.width}
+          height={containerSize.height}
+          aria-hidden
+        >
+          <defs>
+            <marker
+              id={`at-flow-arrow-${team.teamId}`}
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" className={css.edgeArrow} />
+            </marker>
+          </defs>
+          {edges.map((edge) => {
+            const from = nodeRects.get(edge.from)
+            const to = nodeRects.get(edge.to)
+            if (from === undefined || to === undefined || containerRect === null) return null
+            const x1 = from.left + from.width / 2 - containerRect.left
+            const y1 = from.top + from.height / 2 - containerRect.top
+            const x2 = to.left + to.width / 2 - containerRect.left
+            const y2 = to.top + to.height / 2 - containerRect.top
+            const pairKey = `${edge.from}>${edge.to}`
+            const index = pairIndex.get(pairKey) ?? 0
+            pairIndex.set(pairKey, index + 1)
+            const offset = (index - ((pairTotal.get(pairKey) ?? 1) - 1) / 2) * 16
+            const bend = 36
+            const midY = (y1 + y2) / 2 + offset
+            const path = `M ${x1} ${y1} C ${x1 + bend} ${midY}, ${x2 - bend} ${midY}, ${x2} ${y2}`
+            const hot = related !== null && related.has(edge.task.id) && related.has(edge.dep.id)
+            const dimmed = related !== null && !hot
+            const labelWidth = Math.max(36, edge.task.id.length * 8 + 16)
+            return (
+              <g key={edge.id}>
+                <path className={css.edgePath} data-dimmed={dimmed} data-hot={hot} d={path} markerEnd={`url(#at-flow-arrow-${team.teamId})`} />
+                <g
+                  className={css.edgeLabel}
+                  data-dimmed={dimmed}
+                  data-hot={hot}
+                  transform={`translate(${(x1 + x2) / 2} ${midY})`}
+                  onMouseEnter={() => { setFocusedTaskId(edge.task.id) }}
+                  onMouseLeave={() => { setFocusedTaskId(null) }}
+                  onFocus={() => { setFocusedTaskId(edge.task.id) }}
+                  onBlur={() => { setFocusedTaskId(null) }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`需求 ${edge.task.id} 从 ${edge.from} 流转到 ${edge.to}`}
+                >
+                  <rect className={css.edgeLabelBg} width={labelWidth} height={20} rx={10} />
+                  <text className={css.edgeLabelText} x={labelWidth / 2} y={14} textAnchor="middle">{edge.task.id}</text>
+                  <title>{`${edge.task.id} ${edge.task.subject}：${edge.from} → ${edge.to}`}</title>
+                </g>
+              </g>
+            )
+          })}
+        </svg>
+
+        <div className={css.workerGrid}>
+          {team.members.map((member) => (
+            <WorkerNode
+              key={member.id}
+              member={member}
+              tasks={team.tasks}
+              focusedRelated={related}
+              onFocus={setFocusedTaskId}
+              onBlur={() => { setFocusedTaskId(null) }}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
       </div>
     </section>
   )
 }
 
-/**
- * Locate the conversation view tab bar: the parent of the Trajectory tab.
- * Relative location (role + text) keeps this working across shell upgrades
- * that change hashed class names; Trajectory text is matched in both
- * supported locales.
- */
+
 export function findConversationTabBar(): HTMLElement | null {
   const tabs = document.querySelectorAll<HTMLElement>('[role="tab"]')
   for (const tab of tabs) {
@@ -399,7 +565,7 @@ export function BoardOverlay({ sessionsList, openSession }: {
   return createPortal(
     <>
       {visibleTeams.map((team) => (
-        <KanbanBoard key={team.teamId} team={team} onNavigate={(id: SessionId) => { openSession(id) }} />
+        <FlowBoard key={team.teamId} team={team} onNavigate={(id: SessionId) => { openSession(id) }} />
       ))}
     </>,
     panelEl,

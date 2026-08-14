@@ -12,28 +12,18 @@
  */
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { ObservableSnapshot, SessionListState } from '@deepseek-ai/dsh-client-runtime/client';
-import { type ActivityTask, type ActivityTeam } from './activity-ui.ts';
+import { type ActivityTeam } from './activity-ui.ts';
 /** Class marker for the injected conversation tab. */
 export declare const BOARD_TAB_CLASS = "dsh-agent-teams-board-tab";
-/** One task card in a board column. */
-export declare function TaskCard({ task, tasks }: {
-    readonly task: ActivityTask;
-    readonly tasks: readonly ActivityTask[];
-}): import("react").JSX.Element;
 /**
- * Board content for one team: a member status strip on top (who is doing
- * what right now) plus per-status task columns in workflow order.
+ * Board content for one team: one node per worker, requirement edges drawn
+ * between workers (a requirement flows from its dependency's worker to its
+ * own worker), and hovering a requirement highlights its whole flow path.
  */
-export declare function KanbanBoard({ team, onNavigate }: {
+export declare function FlowBoard({ team, onNavigate }: {
     readonly team: ActivityTeam;
     readonly onNavigate: (id: SessionId) => void;
 }): import("react").JSX.Element;
-/**
- * Locate the conversation view tab bar: the parent of the Trajectory tab.
- * Relative location (role + text) keeps this working across shell upgrades
- * that change hashed class names; Trajectory text is matched in both
- * supported locales.
- */
 export declare function findConversationTabBar(): HTMLElement | null;
 /**
  * The main-interface task board: injects the 任务看板 tab and, while the

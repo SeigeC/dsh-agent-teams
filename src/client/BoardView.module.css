@@ -41,88 +41,172 @@
   line-height: 15px;
 }
 
-.memberStrip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+
+/* flow view: worker nodes + requirement edges */
+
+.flowArea {
+  position: relative;
+  min-width: 0;
 }
 
-.memberCard {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+.flowSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.edgePath {
+  fill: none;
+  stroke: var(--dsw-alias-border-l3);
+  stroke-width: 1.5px;
+  transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.edgePath[data-hot='true'] {
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 2.5px;
+}
+
+.edgePath[data-dimmed='true'] {
+  opacity: 0.12;
+}
+
+.edgeArrow {
+  fill: var(--dsw-alias-border-l3);
+}
+
+.edgeLabel {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.edgeLabelBg {
+  fill: var(--dsw-alias-bg-base);
+  stroke: var(--dsw-alias-border-l2);
+  stroke-width: 1px;
+}
+
+.edgeLabelText {
+  fill: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.edgeLabel[data-hot='true'] .edgeLabelBg {
+  fill: var(--dsw-alias-state-business-tertiary);
+  stroke: var(--dsw-alias-state-business-primary);
+}
+
+.edgeLabel[data-hot='true'] .edgeLabelText {
+  fill: var(--dsw-alias-state-business-primary);
+}
+
+.edgeLabel[data-dimmed='true'] {
+  opacity: 0.15;
+}
+
+.workerGrid {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.workerNode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 172px;
   min-width: 0;
-  padding: 4px 9px 4px 4px;
+  padding: 10px;
   box-sizing: border-box;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-base);
+  transition: opacity 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.workerNode[data-hot='true'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
+}
+
+.workerNode[data-dimmed='true'] {
+  opacity: 0.35;
+}
+
+.workerHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.memberCard:hover {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, var(--dsw-alias-border-l2));
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-layer-1));
-}
-
-.memberCard[data-activity='working'] {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 65%, transparent);
-  animation: agentTeamsBreathe 4.2s ease-in-out infinite;
-}
-
-.memberCardAvatar {
+.workerAvatar {
   position: relative;
   display: inline-flex;
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
 }
 
-.memberCardAvatar .memberArt {
-  width: 26px;
-  height: 26px;
+.workerArt {
+  width: 28px;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
-.memberCardInitial {
+.workerInitial {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   color: var(--dsw-alias-label-primary-foreground);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 26px;
+  line-height: 28px;
 }
 
-.memberCardInfo {
+.workerInfo {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
 }
 
-.memberCardName {
+.workerName {
   overflow: hidden;
-  max-width: 90px;
   color: var(--dsw-alias-label-primary);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
-  line-height: 16px;
+  line-height: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.memberCardStatus {
+.workerRole {
   overflow: hidden;
-  max-width: 110px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 10px;
   line-height: 14px;
@@ -130,190 +214,105 @@
   white-space: nowrap;
 }
 
-.memberCardStatus[data-activity='working'] {
+.workerDot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.workerStatus {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.workerStatus[data-activity='working'] {
   color: var(--dsw-alias-state-business-primary);
 }
 
-.kanbanColumns {
+.workerTasks {
   display: flex;
-  gap: 8px;
-  min-height: 96px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding-bottom: 2px;
-}
-
-.kanbanColumn {
-  display: flex;
-  flex: none;
   flex-direction: column;
-  width: 200px;
-  min-height: 96px;
-  box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--dsw-alias-markdown-tag) 55%, transparent);
+  gap: 4px;
+  min-height: 20px;
 }
 
-.kanbanColumnHead {
+.taskChip {
   display: flex;
-  flex: none;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-}
-
-.kanbanColumnHead[data-state='running'] {
-  color: var(--dsw-alias-state-business-primary);
-}
-
-.kanbanColumnHead[data-state='completed'] {
-  color: var(--dsw-alias-state-success-primary);
-}
-
-.kanbanColumnHead[data-state='failed'] {
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.kanbanCount {
-  display: inline-flex;
-  min-width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-radius: 9px;
-  background: var(--dsw-alias-markdown-tag);
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.kanbanColumnBody {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
-  padding: 6px;
-}
-
-.taskCard {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 7px 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 7px;
   box-sizing: border-box;
   border: 1px solid var(--dsw-alias-border-l2);
   border-left: 3px solid var(--dsw-alias-label-tertiary);
-  border-radius: 9px;
-  background: var(--dsw-alias-bg-module-platform);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 120ms ease, border-color 120ms ease;
 }
 
-.taskCard[data-state='running'] {
+.taskChip[data-state='running'] {
   border-left-color: var(--dsw-alias-state-business-primary);
 }
 
-.taskCard[data-state='completed'] {
+.taskChip[data-state='completed'] {
   border-left-color: var(--dsw-alias-state-success-primary);
 }
 
-.taskCard[data-state='failed'] {
+.taskChip[data-state='failed'] {
   border-left-color: var(--dsw-alias-state-error-primary);
-  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, var(--dsw-alias-border-l2));
 }
 
-.taskCard[data-state='claimed'] {
+.taskChip[data-state='claimed'] {
   border-left-color: var(--dsw-alias-state-warn-primary);
 }
 
-.taskCardHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+.taskChip:hover {
+  border-color: var(--dsw-alias-state-business-primary);
 }
 
-.taskCardId {
+.taskChip[data-dimmed='true'] {
+  opacity: 0.35;
+}
+
+.taskChipId {
   overflow: hidden;
+  min-width: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.taskBadge {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  height: 16px;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-radius: 8px;
-  background: var(--dsw-alias-markdown-tag);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 16px;
-}
-
-.taskBadge[data-state='running'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, var(--dsw-alias-markdown-tag));
-  color: var(--dsw-alias-state-business-primary);
-}
-
-.taskBadge[data-state='completed'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, var(--dsw-alias-markdown-tag));
-  color: var(--dsw-alias-state-success-primary);
-}
-
-.taskBadge[data-state='failed'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, var(--dsw-alias-markdown-tag));
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.taskBadge[data-state='cancelled'] {
-  background: var(--dsw-alias-markdown-tag);
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.taskCardSubject {
-  overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10.5px;
-  line-height: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskCardRoute {
+.unassignedBar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 6px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  border: 1px dashed var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
-.taskOwner {
-  overflow: hidden;
+.unassignedLabel {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
 }
 
-.taskCardDeps {
-  overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.unassignedBar .taskChip {
+  width: auto;
 }
-
 .taskEmpty {
   padding: 4px 2px;
   color: var(--dsw-alias-label-tertiary);
