@@ -151,7 +151,9 @@ function buildEdges(tasks: readonly ActivityTask[]): FlowEdge[] {
 /** Max requirement orbs rendered inside one worker orb (+N for the rest). */
 const TASK_ORB_COUNT = 6
 
-/** One requirement orb: a small ball nested inside its worker orb. */
+/** One requirement orb: a small ball nested inside its worker orb. The orb
+ * is marked active while its worker is actually executing it, so a working
+ * node visibly shows the requirement it is handling. */
 function TaskOrb({ task, tasks, dimmed, hot, onFocus, onBlur }: {
   readonly task: ActivityTask
   readonly tasks: readonly ActivityTask[]
@@ -161,14 +163,16 @@ function TaskOrb({ task, tasks, dimmed, hot, onFocus, onBlur }: {
   readonly onBlur: () => void
 }) {
   const tone = taskTone(task.state, task.status)
+  const active = task.status === 'in_progress'
   return (
     <button
       type="button"
       className={css.taskOrb}
       data-state={tone}
+      data-active={active}
       data-dimmed={dimmed}
       data-hot={hot}
-      title={`${task.id} ${task.subject}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, tasks)}` : ''}`}
+      title={`${task.id} ${task.subject}${active ? ' · 正在执行' : ''}${task.dependencies.length > 0 ? ` · 依赖 ${dependencyLabel(task, tasks)}` : ''}`}
       onMouseEnter={() => { onFocus(task.id) }}
       onMouseLeave={onBlur}
       onFocus={() => { onFocus(task.id) }}
@@ -445,7 +449,8 @@ function layoutWorkerOrbs(team: ActivityTeam): Map<string, { x: number; y: numbe
 /**
  * Board content for one team: worker orbs laid out by dagre and rendered
  * with React Flow; requirement edges run between adjacent columns with
- * arrow markers; hovering a requirement (rail item or nested orb)
+ * arrow markers; hovering a requirement (rail item or nested orb) draws a
+ * line from the requirement itself to the node currently handling it, and
  * highlights its whole flow path.
  */
 export function FlowBoard({ team, onNavigate }: {
@@ -453,6 +458,10 @@ export function FlowBoard({ team, onNavigate }: {
   readonly onNavigate: (id: SessionId) => void
 }) {
   const [focusedRequirementId, setFocusedRequirementId] = useState<string | null>(null)
+  const layoutRef = useRef<HTMLDivElement | null>(null)
+  /** SVG path (layout coordinates) of the hover link from the focused rail
+   * item to its handler orb, routed around every other orb. */
+  const [hoverLinkPath, setHoverLinkPath] = useState<string | null>(null)
   const requirements = useMemo(() => buildRequirements(team.tasks), [team.tasks])
   const requirementByTask = useMemo(() => {
     const map = new Map<string, string>()
@@ -472,6 +481,64 @@ export function FlowBoard({ team, onNavigate }: {
   }, [focusedRequirementId, requirements])
   const completedCount = team.tasks.filter((task) => task.status === 'completed').length
   const positions = useMemo(() => layoutWorkerOrbs(team), [team])
+
+  // Measure the hover link from the focused rail item to its handler orb.
+  // Re-measured on window resize and on the layout scroll so the line
+  // tracks the panel while it scrolls.
+  useEffect(() => {
+    if (focusedRequirementId === null) {
+      setHoverLinkPath(null)
+      return
+    }
+    const layout = layoutRef.current
+    if (layout === null) return
+    const requirement = requirements.find((candidate) => candidate.id === focusedRequirementId)
+    if (requirement === undefined) {
+      setHoverLinkPath(null)
+      return
+    }
+    const holder = currentHolderOf(requirement)
+    if (holder === '待认领' || holder === '已收齐') {
+      setHoverLinkPath(null)
+      return
+    }
+    const measure = (): void => {
+      const railItem = layout.querySelector<HTMLElement>(`[data-rail-task="${focusedRequirementId}"]`)
+      const orb = layout.querySelector<HTMLElement>(`[data-worker-node][data-worker-name="${holder}"]`)
+      if (railItem === null || orb === null) {
+        setHoverLinkPath(null)
+        return
+      }
+      const layoutRect = layout.getBoundingClientRect()
+      const railRect = railItem.getBoundingClientRect()
+      const orbRect = orb.getBoundingClientRect()
+      const x1 = railRect.right - layoutRect.left
+      const y1 = railRect.top + railRect.height / 2 - layoutRect.top
+      const x2 = orbRect.left - layoutRect.left
+      const y2 = orbRect.top + orbRect.height / 2 - layoutRect.top
+      // Every other orb is an obstacle: the link may never cross a node.
+      const obstacles: Box[] = [...layout.querySelectorAll<HTMLElement>('[data-worker-node]')]
+        .filter((el) => el.dataset.workerName !== holder)
+        .map((el) => {
+          const rect = el.getBoundingClientRect()
+          return {
+            left: rect.left - layoutRect.left,
+            top: rect.top - layoutRect.top,
+            right: rect.right - layoutRect.left,
+            bottom: rect.bottom - layoutRect.top,
+          }
+        })
+      setHoverLinkPath(routeConnection(x1, y1, x2, y2, obstacles, 42))
+    }
+    measure()
+    const onResize = (): void => { measure() }
+    window.addEventListener('resize', onResize)
+    layout.addEventListener('scroll', onResize, true)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      layout.removeEventListener('scroll', onResize, true)
+    }
+  }, [focusedRequirementId, requirements])
 
   const nodes = useMemo<Node[]>(() => team.members.map((member) => ({
     id: member.name,
@@ -514,6 +581,8 @@ export function FlowBoard({ team, onNavigate }: {
     }
   }), [team.tasks, related])
 
+  const markerId = `dsh-agent-teams-hover-arrow-${team.teamId.replace(/[^a-zA-Z0-9_-]/g, '')}`
+
   return (
     <section className={css.board} data-board data-team-id={team.teamId}>
       <header className={css.boardHead}>
@@ -525,7 +594,7 @@ export function FlowBoard({ team, onNavigate }: {
         </span>
       </header>
 
-      <div className={css.boardLayout}>
+      <div className={css.boardLayout} ref={layoutRef}>
         <RequirementRail
           requirements={requirements}
           focusedRequirementId={focusedRequirementId}
@@ -554,6 +623,25 @@ export function FlowBoard({ team, onNavigate }: {
             className={css.flowCanvas}
           />
         </div>
+
+        {hoverLinkPath !== null && (
+          <svg className={css.hoverLinkLayer} aria-hidden>
+            <defs>
+              <marker
+                id={markerId}
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" className={css.hoverLinkArrow} />
+              </marker>
+            </defs>
+            <path className={css.hoverLink} d={hoverLinkPath} markerEnd={`url(#${markerId})`} />
+          </svg>
+        )}
       </div>
     </section>
   )

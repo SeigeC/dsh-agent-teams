@@ -18,7 +18,8 @@ export declare const BOARD_TAB_CLASS = "dsh-agent-teams-board-tab";
 /**
  * Board content for one team: worker orbs laid out by dagre and rendered
  * with React Flow; requirement edges run between adjacent columns with
- * arrow markers; hovering a requirement (rail item or nested orb)
+ * arrow markers; hovering a requirement (rail item or nested orb) draws a
+ * line from the requirement itself to the node currently handling it, and
  * highlights its whole flow path.
  */
 export declare function FlowBoard({ team, onNavigate }: {
