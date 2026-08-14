@@ -183,10 +183,10 @@ function TaskOrb({ task, tasks, dimmed, hot, onFocus, onBlur }: {
   )
 }
 
-/** One worker orb: the big ball holding its requirement orbs inside. Only
- * the requirement currently being executed shows a mini orb by default, so
- * the board reads at a glance; hovering a requirement reveals all of its
- * stage orbs (with the flow edges between them). */
+/** One worker orb: the big ball holding its requirement orbs inside. Every
+ * stage orb of the worker's requirements is shown; the stage currently
+ * being executed is marked active (filled, breathing), so the board reads
+ * which stage is live while the full flow stays visible. */
 function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate }: {
   readonly member: ActivityMember
   readonly tasks: readonly ActivityTask[]
@@ -197,12 +197,7 @@ function WorkerNode({ member, tasks, focusedRelated, onFocus, onBlur, onNavigate
 }) {
   const owned = tasks.filter((task) => task.assignee === member.name)
   const involved = focusedRelated === null || owned.some((task) => focusedRelated.has(task.id))
-  // Default: only the running stage. While a requirement is focused, show
-  // every one of its stages this worker owns (the flow path).
-  const visible = (focusedRelated !== null
-    ? owned.filter((task) => focusedRelated.has(task.id))
-    : owned.filter((task) => task.status === 'in_progress'))
-    .slice(0, TASK_ORB_COUNT)
+  const visible = owned.slice(0, TASK_ORB_COUNT)
   const overflow = owned.length - visible.length
   // All orbs sit on the ring (a single orb lands at 3 o'clock), so the
   // avatar in the middle is never covered.
