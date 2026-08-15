@@ -4,8 +4,9 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
 export declare const inject: string[];
 /**
  * Mount the floater through a body portal (the web shell has no top-right
- * slot) and register the in-conversation team card, whose "activity panel"
+ * slot), register the in-conversation team card, whose "activity panel"
  * button re-activates the floater via a window event — the recovery path
- * for a closed floater or a re-opened session.
+ * for a closed floater or a re-opened session — and mount the main-interface
+ * task board (third conversation tab).
  */
 export declare function apply(ctx: ClientContext): void;

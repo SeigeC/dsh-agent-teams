@@ -1,0 +1,628 @@
+/**
+ * Task board view styles. The conversation-tab replacement uses a
+ * JS-injected global stylesheet (see BOARD_GLOBAL_CSS in BoardView.tsx)
+ * because the css-module pipeline cannot emit the `::after` rules; this
+ * module styles the board content only.
+ * @module dsh-agent-teams/client/board/css
+ */
+
+/* board */
+
+.board {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.boardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.teamName {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamStats {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+
+/* flow view: worker nodes + requirement edges */
+
+.boardLayout {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 16px;
+  min-height: 0;
+}
+
+.requirementRail {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 14px;
+  width: 268px;
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  box-sizing: border-box;
+}
+
+.railGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.railGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 3px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.railCount {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--dsw-alias-markdown-tag);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.railItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-left: 3px solid var(--dsw-alias-label-tertiary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.railItem[data-state='running'] {
+  border-left-color: var(--dsw-alias-state-business-primary);
+}
+
+.railItem[data-state='completed'] {
+  border-left-color: var(--dsw-alias-state-success-primary);
+}
+
+.railItem[data-state='failed'] {
+  border-left-color: var(--dsw-alias-state-error-primary);
+}
+
+.railItem[data-state='claimed'] {
+  border-left-color: var(--dsw-alias-state-warn-primary);
+}
+
+.railItem:hover {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 5%, var(--dsw-alias-bg-layer-1));
+}
+
+.railItem[data-hot='true'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  border-left-width: 3px;
+  background: var(--dsw-alias-state-business-tertiary);
+}
+
+.railItem[data-dimmed='true'] {
+  opacity: 0.35;
+}
+
+.railItemSubject {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.railItemOwner {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9.5px;
+  line-height: 14px;
+}
+
+
+.flowArea {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.flowCanvas {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.nodeWrap {
+  position: relative;
+}
+
+/* Connection handles exist only for edge geometry; keep them invisible. */
+.nodeHandle {
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
+.flowSvg {
+  z-index: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.edgePath {
+  fill: none;
+  stroke: var(--dsw-alias-border-l3);
+  stroke-width: 1.5px;
+  transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.edgePath[data-hot='true'] {
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 2.5px;
+}
+
+.edgePath[data-dimmed='true'] {
+  opacity: 0.12;
+}
+
+.edgeArrow {
+  /* Fixed dark fill and full opacity: markers inherit the referencing
+   * path's opacity (the handler link is a 0.7 dashed line), which would
+   * wash the arrow out. */
+  fill: var(--dsw-alias-label-secondary);
+  opacity: 1;
+}
+
+.handlerLink {
+  /* Opacity on the path would wash out its arrow marker too (group
+   * compositing), so the subdued look comes from the stroke color. */
+  fill: none;
+  stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 30%, transparent);
+  stroke-width: 1.25px;
+  stroke-dasharray: 4 3;
+  transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.handlerLink[data-hot='true'] {
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 2px;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+
+.handlerLink[data-dimmed='true'] {
+  opacity: 0.12;
+}
+
+/* Hover link: from the focused rail requirement to its handler node.
+ * Drawn as an overlay over the whole board layout (rail + flow area), with
+ * a solid business stroke and a fixed arrow; never crosses another orb. */
+
+.hoverLinkLayer {
+  z-index: 3;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.hoverLink {
+  fill: none;
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 2px;
+  filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, transparent));
+}
+
+.hoverLinkArrow {
+  fill: var(--dsw-alias-state-business-primary);
+}
+
+
+.edgeLabel {
+  display: inline-flex;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 120ms ease;
+}
+
+.edgeLabelBg {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.edgeLabel[data-hot='true'] .edgeLabelBg {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.edgeLabel[data-dimmed='true'] {
+  opacity: 0.15;
+}
+
+.workerGrid {
+  z-index: 1;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 26px 40px;
+  align-items: start;
+  justify-items: center;
+  padding: 10px 0 6px;
+}
+
+.workerSlot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+
+.workerOrb {
+  position: relative;
+  display: flex;
+  width: 148px;
+  height: 148px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-layer-1) 58%);
+  box-shadow:
+    0 2px 8px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
+  transition: opacity 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.workerOrb[data-activity='working'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  animation: agentTeamsOrbBreathe 2.4s ease-in-out infinite;
+}
+
+.workerOrb[data-hot='true'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, transparent),
+    0 6px 18px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
+}
+
+.workerOrb[data-dimmed='true'] {
+  opacity: 0.28;
+}
+
+.orbAvatar {
+  position: relative;
+  display: inline-flex;
+  width: 56px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.orbArt {
+  width: 54px;
+  height: 54px;
+  box-sizing: border-box;
+  border: 2px solid var(--dsw-alias-bg-base);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
+}
+
+.orbInitial {
+  display: inline-flex;
+  width: 54px;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--dsw-alias-bg-base);
+  border-radius: 50%;
+  color: var(--dsw-alias-label-primary-foreground);
+  font-size: 20px;
+  font-weight: 600;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
+}
+
+.orbTasks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.orbTaskSlot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.orbTaskSlot > * {
+  pointer-events: auto;
+}
+
+.taskOrb {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-sizing: border-box;
+  border: 2px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 30px;
+  cursor: pointer;
+  transition: opacity 120ms ease, border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+
+.taskOrb:hover {
+  transform: scale(1.12);
+}
+
+.taskOrb[data-state='running'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.taskOrb[data-state='completed'] {
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.taskOrb[data-state='failed'] {
+  border-color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, var(--dsw-alias-bg-base));
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.taskOrb[data-state='claimed'] {
+  border-color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.taskOrb[data-hot='true'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, transparent);
+}
+
+/* The worker is currently executing this requirement: a filled, breathing
+ * mini node inside the working orb. */
+.taskOrb[data-active='true'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+  animation: agentTeamsOrbBreathe 2.4s ease-in-out infinite;
+}
+
+.taskOrb[data-dimmed='true'] {
+  opacity: 0.3;
+}
+
+.orbOverflow {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: var(--dsw-alias-markdown-tag);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.orbUnread {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 2px solid var(--dsw-alias-bg-layer-1);
+  border-radius: 10px;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.workerName {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workerMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+}
+
+.workerRole {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workerState {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.workerState[data-activity='working'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.workerStateDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.workerStateDot[data-activity='working'] {
+  background: var(--dsw-alias-state-business-primary);
+  animation: agentTeamsOrbBreathe 2.4s ease-in-out infinite;
+}
+
+@keyframes agentTeamsOrbBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-state-business-primary) 0%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent); }
+}
+
+
+
+.taskEmpty {
+  padding: 4px 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+}
+
+.unreadPill {
+  display: inline-flex;
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+@keyframes agentTeamsBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-alias-state-business-primary) 0%, transparent); }
+  50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 28%, transparent); }
+}

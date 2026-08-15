@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 // slot, whose keyed renderer map lives in the ui-conversation contract.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { ActivityPanel } from './ActivityPanel.tsx'
+import { BoardOverlay } from './BoardView.tsx'
 import { AgentTeamsCard, type AgentTeamsCardInjected } from './AgentTeamsCard.tsx'
 import { agentTeamsCardDefinition } from './agent-teams-card-definition.ts'
 
@@ -14,9 +15,10 @@ export const inject = ['conversationEvents', 'slots', 'sessions']
 
 /**
  * Mount the floater through a body portal (the web shell has no top-right
- * slot) and register the in-conversation team card, whose "activity panel"
+ * slot), register the in-conversation team card, whose "activity panel"
  * button re-activates the floater via a window event — the recovery path
- * for a closed floater or a re-opened session.
+ * for a closed floater or a re-opened session — and mount the main-interface
+ * task board (third conversation tab).
  */
 export function apply(ctx: ClientContext): void {
   const host = document.createElement('div')
@@ -31,6 +33,19 @@ export function apply(ctx: ClientContext): void {
     root.unmount()
     host.remove()
   }, 'agent-teams: activity panel')
+
+  const boardHost = document.createElement('div')
+  boardHost.dataset.agentTeamsBoardHost = ''
+  document.body.appendChild(boardHost)
+  const boardRoot = createRoot(boardHost)
+  boardRoot.render(<BoardOverlay
+    sessionsList={ctx.sessions.list}
+    openSession={(id: SessionId) => { ctx.sessions.open(id) }}
+  />)
+  ctx.effect(() => () => {
+    boardRoot.unmount()
+    boardHost.remove()
+  }, 'agent-teams: task board')
 
   ctx.conversationEvents.register(agentTeamsCardDefinition)
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
